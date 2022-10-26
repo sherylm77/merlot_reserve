@@ -3,6 +3,8 @@ Convert TVQA into tfrecords
 """
 import sys
 
+from gevent import config
+
 sys.path.append('/home/sheryl/merlot_reserve')
 import argparse
 import hashlib
@@ -43,6 +45,13 @@ parser.add_argument(
     default='/home/sheryl/raw/',
     type=str,
     help='Image directory.'
+)
+parser.add_argument(
+    '-speaker_turns',
+    dest='speaker_turns',
+    default=False,
+    type=bool,
+    help='use speaker turns'
 )
 """
 Must set things up like this in the data_dir
@@ -142,12 +151,14 @@ with open(split_fn, 'r') as f:
 ts_lens = [x['ts'][1] - x['ts'][0] for x in data]
 max_end = max([x['ts'][1] for x in data])
 
-speaker_diar_file = open("../../../raw/speaker_diar.pk", 'rb')
-speaker_diar = pickle.load(speaker_diar_file)
+if args.speaker_turns:
+    speaker_diar_file = open("../../../raw/speaker_diar.pk", 'rb')
+    speaker_diar = pickle.load(speaker_diar_file)
+else:
+    speaker_diar_file = None
+    speaker_diar = None
 
 def parse_item(item):
-    using_speaker_turns = False
-
     answer_num = 0
     answer_choices = []
     while f"a{answer_num}" in item:
@@ -171,7 +182,7 @@ def parse_item(item):
 
     # Midpoint will be the middle of the (middle) chunk, so round it to the nearest 1/3rd
     # because that's when frames were extracted
-    if not using_speaker_turns:
+    if not args.speaker_turns:
         midpoint = (ts0 + ts1) / 2.0
         midpoint = round(midpoint * 3) / 3
 
@@ -246,7 +257,7 @@ def parse_item(item):
         #     speaker_in_frame = speaker_num
         #     if t_mid_3ps_idx >= start_time and t_mid_3ps_idx <= end_time:
         #         speaker_in_frame = speaker_num
-        if using_speaker_turns: speakers.append(trow['speaker'])        
+        if args.speaker_turns: speakers.append(trow['speaker'])        
 
         fn = os.path.join(frames_path, item['vid_name'] + "_trimmed-out_" + f'{t_mid_3ps_idx:03d}.jpg')
         if os.path.exists(fn):
@@ -344,11 +355,11 @@ def parse_item(item):
     qa_item['_mp3_fn'] = audio_fn_mp3
     qa_item['_frames_path'] = frames_path
     qa_item['_time_interval'] = [ts0, ts1]
-    if using_speaker_turns: qa_item['speakers'] = speakers
+    if args.speaker_turns: qa_item['speakers'] = speakers
 
 
     # Pad to 7
-    if using_speaker_turns:
+    if args.speaker_turns:
         for i in range(20 - len(frames)):
             frames.append(frames[-1])
             spectrograms.append(spectrograms[-1])
