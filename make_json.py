@@ -5,16 +5,16 @@ import subprocess
 import sys
 import random
 
-sys.path.append("/home/sheryl")
+sys.path.append("/work/sheryl")
 
 from raw import socialiq_std_folds
 
 def make_json_for(vids, file_name):
     for vid in vids:
         vid_name = vid + "_trimmed-out.mp4"
-        vid_length = subprocess.check_output(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=duration', '-of', 'default=noprint_wrappers=1:nokey=1', os.path.join("/home/sheryl/raw/vision/raw", vid_name)])
+        vid_length = subprocess.check_output(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=duration', '-of', 'default=noprint_wrappers=1:nokey=1', os.path.join("/work/sheryl/raw/vision/raw", vid_name)])
         
-        vid_filename = os.path.join("/home/sheryl/raw/qa", vid + "_trimmed.txt")
+        vid_filename = os.path.join("/work/sheryl/raw/qa", vid + "_trimmed.txt")
         vid_file = open(vid_filename, "r") 
 
         file_end = False
@@ -69,32 +69,37 @@ def make_json_for(vids, file_name):
                             incorrect_num += 1
                             all_incorrect_ans.append(answer)
                     else:
+                        # four answers - multiple choice q&a task
                         # question
-                        # if len(all_incorrect_ans) != 3:
-                        #     print(vid_dict['qid'])
-                            # vid_file.seek(pos)
-                            # break
-                        # for ans in all_correct_ans:
-                        #     all_answers = []
-                        #     all_answers.extend(all_incorrect_ans)
-                        #     all_answers.append(ans)
-                        #     random.shuffle(all_answers)
-                        #     for j in range(4):
-                        #         curr_ans = all_answers.pop(0)
-                        #         vid_dict["a"+str(j)] = curr_ans
-                        #         if curr_ans in all_correct_ans:
-                        #             vid_dict['answer_idx'] = j
-                        #         file_name.write(json.dumps(vid_dict) + "\n")
-                        product = [[a, b] for a in all_correct_ans for b in all_incorrect_ans]
-                        for answers in product: 
-                            random.shuffle(answers)                           
-                            vid_dict["a0"] = answers[0]
-                            vid_dict["a1"] = answers[1]
-                            if answers[0] in all_correct_ans:
-                                vid_dict['answer_idx'] = 0
-                            else:
-                                vid_dict['answer_idx'] = 1
+                        if len(all_incorrect_ans) != 3:
+                            print(vid_dict['qid'])
+                            vid_file.seek(pos)
+                            break
+                        for ans in all_correct_ans:
+                            all_answers = []
+                            all_answers.extend(all_incorrect_ans)
+                            all_answers.append(ans)
+                            random.shuffle(all_answers)
+                            for j in range(4):
+                                curr_ans = all_answers.pop(0)
+                                vid_dict["a"+str(j)] = curr_ans
+                                if curr_ans in all_correct_ans:
+                                    vid_dict['answer_idx'] = j
                             file_name.write(json.dumps(vid_dict) + "\n")
+
+                        # two answers - binary q&a task
+                        # product = [[a, b] for a in all_correct_ans for b in all_incorrect_ans]
+                        # for answers in product: 
+                        #     random.shuffle(answers)                           
+                        #     vid_dict["a0"] = answers[0]
+                        #     vid_dict["a1"] = answers[1]
+                        #     if answers[0] in all_correct_ans:
+                        #         vid_dict['answer_idx'] = 0
+                        #     else:
+                        #         vid_dict['answer_idx'] = 1
+                        #     file_name.write(json.dumps(vid_dict) + "\n")
+
+
                             # print(vid_dict)
                         vid_file.seek(pos)
                         break    
@@ -102,10 +107,10 @@ def make_json_for(vids, file_name):
 train_vids = socialiq_std_folds.standard_train_fold
 val_vids = socialiq_std_folds.standard_valid_fold
 
-all_vids = os.listdir("/home/sheryl/raw/vision/raw")
+all_vids = os.listdir("/work/sheryl/raw/vision/raw")
 
-train_file = open("/home/sheryl/raw/siq_train.jsonl", "w")
-val_file = open("/home/sheryl/raw/siq_val.jsonl", "w")
+train_file = open("/work/sheryl/raw/siq_train4.jsonl", "w")
+val_file = open("/work/sheryl/raw/siq_val4.jsonl", "w")
 
 make_json_for(train_vids, train_file)
 make_json_for(val_vids, val_file)
