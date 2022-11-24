@@ -179,10 +179,10 @@ def preprocess_tvqa(record, config):
 
     for i in range(config['num_segments']):
         k2f[f'c{i:02d}/image_encoded'] = tf.io.FixedLenFeature((), tf.string, default_value='')
-        # k2f[f'c{i:02d}/bmasks_encoded'] = tf.io.FixedLenFeature((), tf.string, default_value='')
-        # k2f[f'c{i:02d}/fmasks_encoded'] = tf.io.FixedLenFeature((), tf.string, default_value='')
-        # k2f[f'c{i:02d}/bbox'] = tf.io.VarLenFeature(tf.float32)
-        # k2f[f'c{i:02d}/fbbox'] = tf.io.VarLenFeature(tf.float32)
+        k2f[f'c{i:02d}/bmasks_encoded'] = tf.io.FixedLenFeature((), tf.string, default_value='')
+        k2f[f'c{i:02d}/fmasks_encoded'] = tf.io.FixedLenFeature((), tf.string, default_value='')
+        k2f[f'c{i:02d}/bbox'] = tf.io.VarLenFeature(tf.float32)
+        k2f[f'c{i:02d}/fbbox'] = tf.io.VarLenFeature(tf.float32)
         k2f[f'c{i:02d}/spec_encoded'] = tf.io.FixedLenFeature((), tf.string, default_value='')
         k2f[f'c{i:02d}/sub'] = tf.io.VarLenFeature(tf.int64)
     features = tf.io.parse_single_example(record, k2f)
@@ -193,29 +193,34 @@ def preprocess_tvqa(record, config):
             x = tf.cast(x, dtype=tf.int32)
         return x
     
-    # import pdb; pdb.set_trace()
 
-    # segment_list = [{k: _unsparsify(features.pop(f'c{i:02d}/{k}')) for k in ['image_encoded', 'bmasks_encoded', 'fmasks_encoded', 'bbox', 'fbbox', 'spec_encoded', 'sub']} for i in
-    #                 range(config['num_segments'])] # len(segment_list) = 7
-    segment_list = [{k: _unsparsify(features.pop(f'c{i:02d}/{k}')) for k in ['image_encoded', 'spec_encoded', 'sub']} for i in
-                    range(config['num_segments'])]
+    segment_list = [{k: _unsparsify(features.pop(f'c{i:02d}/{k}')) for k in ['image_encoded', 'bmasks_encoded', 'fmasks_encoded', 'bbox', 'fbbox', 'spec_encoded', 'sub']} for i in
+                    range(config['num_segments'])] # len(segment_list) = 7
     features = {k: _unsparsify(v) for k, v in features.items()} # dict_keys(['answer_text', 'qa_choice_0', 'qa_choice_1', 'qa_choice_2', 'qa_choice_3', 'qa_choice_4', 'qa_query', 'id', 'magic_number', 'num_frames', 'qa_label'])
 
 
     encodeds = tf.stack([x['image_encoded'] for x in segment_list]) # TensorShape([7])
     features['images'] = tf.map_fn(functools.partial(load_and_resize_img, config=config), elems=encodeds, fn_output_signature=tf.float32, name='decode_img') # TensorShape([7, 240, 768])
     
-    # bmask_encodeds = tf.stack([x['bmasks_encoded'] for x in segment_list]) # TensorShape([7])
-    # features['bmasks'] = tf.map_fn(functools.partial(load_and_resize_img, config=config), elems=bmask_encodeds, fn_output_signature=tf.float32, name='decode_img') # TensorShape([7, 240, 768])
+    bmask_encodeds = tf.stack([x['bmasks_encoded'] for x in segment_list]) # TensorShape([7])
+    features['bmasks'] = tf.map_fn(functools.partial(load_and_resize_img, config=config), elems=bmask_encodeds, fn_output_signature=tf.float32, name='decode_img') # TensorShape([7, 240, 768])
     
-    # features['bbox'] = tf.ragged.stack([x['bbox'] for x in segment_list])
+    bbox = tf.ragged.stack([x['bbox'] for x in segment_list])
     
-    # fmask_encodeds = tf.stack([x['fmasks_encoded'] for x in segment_list]) # TensorShape([7])
-    # features['fmasks'] = tf.map_fn(functools.partial(load_and_resize_img, config=config), elems=fmask_encodeds, fn_output_signature=tf.float32, name='decode_img') # TensorShape([7, 240, 768])
+    fmask_encodeds = tf.stack([x['fmasks_encoded'] for x in segment_list]) # TensorShape([7])
+    features['fmasks'] = tf.map_fn(functools.partial(load_and_resize_img, config=config), elems=fmask_encodeds, fn_output_signature=tf.float32, name='decode_img') # TensorShape([7, 240, 768])
     
-#     features['fbbox'] = tf.ragged.stack([x['fbbox'] for x in segment_list])
+    fbbox = tf.ragged.stack([x['fbbox'] for x in segment_list])
     
-     
+    if config['mask_where'] == "random":
+        features['masks_info'], maskidx = create_masks(features["fmasks"], config, NO_MASK=True)
+    else:
+        mask_where = config['mask_where'][0]+'masks'
+        if tf.reduce_sum(bbox.values) > 0.0:
+            features['masks_info'], maskidx = create_masks(features[mask_where], config)
+        else:
+            features['masks_info'], maskidx = create_masks(features[mask_where], config, NO_MASK=True)
+
     audio_encodeds = tf.stack([x['spec_encoded'] for x in segment_list]) # TensorShape([7])
     features['audio_clips'] = tf.map_fn(functools.partial(tf.image.decode_jpeg, channels=1), audio_encodeds, fn_output_signature=tf.uint8) # TensorShape([7, 180, 65, 1])
     features['audio_clips'] = tf.reshape(features['audio_clips'], [config['num_segments'], 3, 60, 65]) # TensorShape([7, 3, 60, 65])
@@ -252,17 +257,18 @@ def preprocess_tvqa(record, config):
         audio_seq_i = tf.stack([audio_input_ragged.values, segment_id], -1) # TensorShape([166, 2])
         audio_seq_i = pad_to_fixed_size(audio_seq_i, 0, output_shape=[config['lang_seq_len'], 2], truncate=True) # TensorShape([160, 2])
         audio_seqs.append(audio_seq_i)
-        
         last_seqment_id_audio = segment_id[-1]
-            
+
         h1, w1 = config['output_grid']
         vision_span_full = tf.fill([(h1*w1) // 4], MASKVIDEO) # TensorShape([18*30])
+        vision_span_full_values = tf.where(maskidx, MASK, MASKVIDEO)
+        
         vision_input_ragged = tf.ragged.stack([vision_span_full for _ in segment_list]) # TensorShape([8, None])
         segment_id_audio = tf.cast(tf.where(vision_input_ragged)[:, 0], dtype=tf.int32) + last_seqment_id_audio + 1
         segment_id_text = tf.cast(tf.where(vision_input_ragged)[:, 0], dtype=tf.int32) + last_seqment_id_text + 1
         
-        vision_seq_i_audio = tf.stack([vision_input_ragged.values, segment_id_audio], -1) 
-        vision_seq_i_text = tf.stack([vision_input_ragged.values, segment_id_text], -1) 
+        vision_seq_i_audio = tf.stack([vision_span_full_values, segment_id_audio], -1) 
+        vision_seq_i_text = tf.stack([vision_span_full_values, segment_id_text], -1) 
         
         vision_seq_i_audio = tf.concat([audio_seq_i, vision_seq_i_audio], 0)
         vision_seq_i_text = tf.concat([textonly_seq_i, vision_seq_i_text], 0)
@@ -274,13 +280,12 @@ def preprocess_tvqa(record, config):
     features['vision_seqs_audio'] = tf.stack(vision_seqs_audio) # (1, 580, 2)
     features['vision_seqs_text'] = tf.stack(vision_seqs_text) # (1, 580, 2)
     features['labels'] = features.pop('qa_label') # <tf.Tensor: shape=(), dtype=int32, numpy=1>
-    
 
     # do this so we don't have to mask
     frame_is_valid = tf.cast(tf.less(tf.range(config['num_segments']), features['num_frames']), dtype=tf.float32)
     features['images'] *= frame_is_valid[:, None, None] # frame_is_valid[:, None, None] -> TensorShape([7, 1, 1]); TensorShape([7, 240, 768])
-    # features['bmasks'] *= frame_is_valid[:, None, None]
-    # features['fmasks'] *= frame_is_valid[:, None, None]
+    features['bmasks'] *= frame_is_valid[:, None, None]
+    features['fmasks'] *= frame_is_valid[:, None, None]
 
     if config.get('do_random_scale', True):
         print("Random adjustment of audio clips")
@@ -314,6 +319,75 @@ def preprocess_tvqa(record, config):
     return features
 
 
+def pad_up_to(t, max_in_dims, constant_values):
+    s = tf.shape(t)
+    paddings = [[0, m-s[i]] for (i,m) in enumerate(max_in_dims)]
+    return tf.pad(t, paddings, 'CONSTANT', constant_values=constant_values)
+
+def tf_random_choice_no_replacement_v1(one_dim_input, num_indices_to_drop):
+    input_length = tf.shape(one_dim_input)[0]
+    tf.random.set_seed(123456)
+    uniform_distribution = tf.random.uniform(
+        shape=[input_length],
+        minval=0,
+        maxval=None,
+        dtype=tf.float32,
+        seed=10,
+        name=None
+    )
+
+    # grab the indices of the greatest num_words_to_drop values from the distibution
+    _, indices_to_keep = tf.nn.top_k(uniform_distribution, num_indices_to_drop)
+    sorted_indices_to_keep = tf.sort(indices_to_keep)
+
+    # gather indices from the input array using the filtered actual array
+    result = tf.gather(one_dim_input, sorted_indices_to_keep)
+    return result
+
+def create_masks(mask, config, NO_MASK = False):
+    # import pdb; pdb.set_trace()
+    *batch_dims, hw, pp3 = mask.shape
+    output_grid_h, output_grid_w = config['output_grid']
+    h2 = output_grid_h // config['vit_pooling_ratio'] # 9
+    w2 = output_grid_w // config['vit_pooling_ratio'] # 15
+    b2 = int(np.prod(list(batch_dims) + [h2])) # 63
+    
+    if NO_MASK:
+        tf.random.set_seed(123456)
+        seq_mask = tf.random.uniform([b2 * w2], minval=0, maxval=4, dtype=tf.int32, seed=10)
+        seq = tf.range(b2 * w2, dtype=tf.int32)
+        return tf.stack([seq, seq_mask], -1), tf.cast(tf.ones([b2 * w2], tf.int32), dtype=tf.bool)
+    
+    total_bmask = 0.25 * config['alpha']
+    mseq = tf.reshape(mask, [b2, config['vit_pooling_ratio'], w2, config['vit_pooling_ratio'], config['hidden_size']]) # (63,2,15,2,768)
+    mseq = tf.transpose(mseq, [0, 2, 1, 3, 4]) #mseq.swapaxes(-4, -3) # (63,15,2,2,768)
+    mseq = tf.reshape(mseq, [b2 * w2, config['vit_pooling_ratio'] ** 2, config['hidden_size']]) # (945,4,768)
+    mseq_wo_hd = tf.reduce_sum(mseq, -1) # (945, 4)
+    ragged_mseq = tf.RaggedTensor.from_tensor(mseq_wo_hd, padding=0) # (945, None)
+    mrow = tf.cast(tf.where(ragged_mseq)[:, 0], dtype=tf.int32)
+    mcol = tf.cast(tf.where(ragged_mseq)[:, 1], dtype=tf.int32)
+    midx = tf.stack([mrow, mcol], -1)
+    p1, p2 = mseq.shape[0], mseq.shape[1]
+    midx = midx[:int(p1*p2*total_bmask)]
+    midx_shape = get_shape_list(midx)
+    mseq_wo_hd = tf.tensor_scatter_nd_update(tf.zeros_like(mseq_wo_hd, dtype=tf.float32), midx, tf.ones([midx_shape[0]], dtype=tf.float32))
+    percent_masks = midx_shape[0] / (p1 * p2)
+    suremask = tf.cast(tf.reduce_sum(mseq_wo_hd, -1), dtype=tf.bool)
+
+    if percent_masks < 0.25:
+        remidxn = int((0.25 - percent_masks) * p1 * p2)
+        allidx = tf.math.logical_not(suremask)
+        allidx = tf.cast(tf.where(allidx), dtype=tf.int32)
+        remidx = tf_random_choice_no_replacement_v1(tf.reshape(allidx, [-1]), remidxn)
+        suremask = tf.tensor_scatter_nd_update(suremask, remidx[:, None], tf.cast(tf.ones([remidxn], tf.int32), dtype=tf.bool))
+        tf.random.set_seed(123456)
+        seq_mask = tf.random.uniform([get_shape_list(remidx)[0]], minval=0, maxval=4, dtype=tf.int32, seed=10)#[..., None]
+        remidx = tf.stack([remidx, seq_mask], -1)
+        midx = tf.concat([midx, remidx], 0)
+   
+    midx =  pad_to_fixed_size(midx, -1, output_shape=[p1, 2], truncate=True)
+    return midx, suremask
+
 def make_dataset_singleimg(config, fns, preprocessor, batch_size, num_devices=1, is_training=True):
     """
     :param config:
@@ -337,11 +411,13 @@ def make_dataset_singleimg(config, fns, preprocessor, batch_size, num_devices=1,
     options.threading.private_threadpool_size = 48
     options.threading.max_intra_op_parallelism = 1
     options.experimental_optimization.map_parallelization = True
-    options.experimental_deterministic = (not is_training)
+    options.experimental_deterministic = True #(not is_training)
     dataset = dataset.with_options(options)
 
-    if is_training:
-        dataset = dataset.shuffle(buffer_size=256)
+    ### EDITTED HERE TO REMOVE DATA SHUFFLE
+    # if is_training:
+    #     dataset = dataset.shuffle(buffer_size=256)
+    ### END
 
     dataset = dataset.map(functools.partial(preprocessor, config=merged_config),
                           num_parallel_calls=tf.data.experimental.AUTOTUNE)
@@ -447,9 +523,11 @@ if __name__ == '__main__':
     config['random_scale_max'] = 1.1
     config['random_scale_min'] = 1.0
     config['num_segments'] = 7
+    config['mask_where'] = "face"
+    config['alpha'] = 0.1
 
     
-    dataset = tf.data.TFRecordDataset(['/home/sakter/preprocessed/out/train000of256.tfrecord'])
+    dataset = tf.data.TFRecordDataset(['/data/sakter/preprocessed/out/train245of256.tfrecord'])
     # # For eager debugging
     for record in dataset:
         x = preprocess_tvqa(record, config)

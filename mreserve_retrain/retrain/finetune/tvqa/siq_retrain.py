@@ -55,7 +55,7 @@ parser.add_argument(
     '-ckpt',
     help='checkpoint to use',
     type=str,
-    default="../../../../base_resadapt",
+    default="/home/sheryl/base.ckpt",
 )
 parser.add_argument(
     '-lr',
@@ -67,7 +67,7 @@ parser.add_argument(
     '-ne',
     help='ne',
     type=int,
-    default=5,
+    default=10,
 )
 parser.add_argument(
     '-output_grid_h',
@@ -103,7 +103,7 @@ parser.add_argument(
     '-wandb_run_name',
     help='wandb_run_name',
     type=str,
-    default='siq_1.0',
+    default='retrain-face',
 )
 parser.add_argument(
     '-output_ext',
@@ -115,7 +115,7 @@ parser.add_argument(
     '-no_wandb',
     help='no_wandb',
     action='store_true',
-    default=True,
+    default=False,
 )
 parser.add_argument(
     '-val_batch_size',
@@ -127,7 +127,26 @@ parser.add_argument(
     '-scan_minibatch',
     help='scan_minibatch -- basically, if this is true then batch size is 1 but we do gradient accumulation',
     action='store_true',
-    default=False,
+    default=True,
+)
+parser.add_argument(
+    '--joint_proj',
+    help='joint_projection',
+    type=str, 
+    choices=['joint_proj', 'no_proj'], 
+    default='no_proj',
+)
+parser.add_argument(
+    '--alpha',
+    help='alpha',
+    type=float,
+    default=0.0,
+)
+parser.add_argument(
+    '--mask_where',
+    help='mask_where',
+    type=str,
+    default='face',
 )
 args = parser.parse_args()
 
@@ -145,6 +164,8 @@ config['data']['num_answers'] = 4
 config['data']['random_scale_max'] = 1.1
 config['data']['random_scale_min'] = 1.0
 config['data']['num_segments'] = 7
+config['data']['mask_where'] = args.mask_where
+config['data']['alpha'] = args.alpha
 
 config['device']['batch_size'] = 8
 config['device']['prefetch_size'] = 0
@@ -206,8 +227,10 @@ class MerlotReserveTVQA(MerlotReserve):
 
     def __call__(self, batch):
 
+        # Encode images (twice)
         batch_size, images_per_batch, seq_size, img_dim = batch['images'].shape # TensorShape([1, 7, 540, 768])
-        vision_out = self.vision_encoder(batch['images'].reshape(batch_size * images_per_batch, seq_size, img_dim))
+        mask_info = batch['masks_info'] #if (args.mask_where == "face" or args.mask_where == "body") else None
+        vision_out = self.vision_encoder(batch['images'].reshape(batch_size * images_per_batch, seq_size, img_dim), mask = mask_info)
         imgs_enc = vision_out['seq_attnpool']
         imgs_enc = imgs_enc.reshape(batch_size, images_per_batch, seq_size // 4, self.hidden_size) # (1, 7, seq_size // 4, 768)
         
@@ -215,10 +238,15 @@ class MerlotReserveTVQA(MerlotReserve):
 
         batch_size, num_ans_per, joint_seq_len, two_ = batch['textonly_seqs'].shape # (1, 1, 256, 2)
         imgs_enc = imgs_enc.reshape(batch_size, images_per_batch * seq_size // 4, self.hidden_size).repeat(num_ans_per, axis=0) # (1, 1080, 768)
-
+       
         
-        #########################
-
+        text_toks = batch['textonly_seqs'][..., 0].reshape(batch_size * num_ans_per, joint_seq_len)
+        vision_inputs_text = self.prepare_multimodal_inputs(
+            tokens=text_toks,
+            token_segment_idx=batch['textonly_seqs'][..., 1].reshape(batch_size * num_ans_per, joint_seq_len),
+            vision_input=imgs_enc,
+        )
+        
         # Encode audio
         # Audio clips are provided as [batch_size, num_segments, num_audio_subsegments, audio_seq_len, num_mels]
         batch_size, num_segments, num_audio_subsegments, audio_seq_len, num_mels = batch['audio_clips'].shape # (1, 7, 3, 60, 65)
@@ -234,16 +262,6 @@ class MerlotReserveTVQA(MerlotReserve):
         audio_pointers = (jnp.cumsum((audio_toks == AUDIOSPAN).astype(jnp.int32), -1) - 1) // audio_token_len # (1, 256)
         audio_pointers = audio_pointers % num_audio_spans # (1, 256)
         
-        text_toks = batch['textonly_seqs'][..., 0].reshape(batch_size * num_ans_per, joint_seq_len)
-        
-        vision_inputs_text = self.prepare_multimodal_inputs(
-            tokens=text_toks,
-            token_segment_idx=batch['textonly_seqs'][..., 1].reshape(batch_size * num_ans_per, joint_seq_len),
-            vision_input=imgs_enc,
-            audio_spans=None,
-            audio_pointers=None,
-        )
-        
         vision_inputs_audio = self.prepare_multimodal_inputs(
             tokens=batch['audio_seqs'][..., 0].reshape(batch_size * num_ans_per, joint_seq_len),
             token_segment_idx=batch['audio_seqs'][..., 1].reshape(batch_size * num_ans_per, joint_seq_len),
@@ -252,10 +270,8 @@ class MerlotReserveTVQA(MerlotReserve):
             audio_pointers=audio_pointers,
         )
         
-        text_toks = batch['vision_seqs_audio'][..., 0].reshape(batch_size * num_ans_per, -1) # (1,1201)
-        audio_toks = batch['vision_seqs_text'][..., 0].reshape(batch_size * num_ans_per, -1) # (1,1201) 
-        
-        #############################################################################################################
+        audio_toks = batch['vision_seqs_audio'][..., 0].reshape(batch_size * num_ans_per, -1) # (1,1201)
+        text_toks = batch['vision_seqs_text'][..., 0].reshape(batch_size * num_ans_per, -1) # (1,1201)         
         
         real_bsizes = [vision_inputs_audio['x'].shape[0], vision_inputs_text['x'].shape[0]]
         x = jnp.concatenate([vision_inputs_audio['x'], vision_inputs_text['x']], 0) # (2,1201,768)
@@ -264,13 +280,21 @@ class MerlotReserveTVQA(MerlotReserve):
         
         keys = ['audio2vision', 'text2vision']
         joint_enc = self.joint_transformer(x, rotary_coords=coords, attention_mask=attnmask)['seq'] # (2,1201,768)
+        
+        
+        ########## EDITING/ ADDED W/O PERTURBATION
+        if args.joint_proj == "joint_proj":
+            joint_enc = self.joint_proj(joint_enc)
+        ##########
+        
+        
         mm_outputs = {k: z for k, z in zip(keys, jnp.split(joint_enc, np.cumsum(real_bsizes), axis=0))}
         
         mm_outputs['audio2vision'] = mm_outputs['audio2vision'][:, joint_seq_len:] # (1, 945, 768)
         mm_outputs['text2vision'] = mm_outputs['text2vision'][:, joint_seq_len:] # (1, 945, 768)
 
         # Pool from the right tokens
-        is_pool = (audio_toks == MASKVIDEO)[:, joint_seq_len:] # (1,945)
+        is_pool = (audio_toks == MASK)[:, joint_seq_len:] # (1,945)
         a2v_cumulative_idx = jnp.cumsum(is_pool.astype(jnp.int32), -1) - 1 # (1,945)
         
         a2v = one_hot_pool(is_pool,
@@ -279,19 +303,33 @@ class MerlotReserveTVQA(MerlotReserve):
                num_segments=images_per_batch * seq_size // 4)['x'].reshape((batch_size * images_per_batch * seq_size // 4, self.hidden_size))
         # 'x': (1, 945, 768), 'idx_oh': (1,945,945), (945, 768)
         
-        is_pool_t2v = (text_toks == MASKVIDEO)[:, joint_seq_len:] # (1, 945)
-        t2v_cumulative_idx = jnp.cumsum(is_pool_t2v.astype(jnp.int32), -1) - 1 # (1, 945)
+        a2v_out = one_hot_pool(is_pool,
+               idx=a2v_cumulative_idx,
+               v=vision_out['target_seq_attnpool'].reshape(batch_size, images_per_batch * seq_size // 4, -1),
+               num_segments=images_per_batch * seq_size // 4)['x'].reshape((batch_size * images_per_batch * seq_size // 4, self.hidden_size))
         
-        t2v = one_hot_pool(is_pool_t2v,
+        is_pool = (text_toks == MASK)[:, joint_seq_len:] # (1, 945)
+        t2v_cumulative_idx = jnp.cumsum(is_pool.astype(jnp.int32), -1) - 1 # (1, 945)
+        
+        t2v = one_hot_pool(is_pool,
                idx=t2v_cumulative_idx,
                v=mm_outputs['text2vision'],
                num_segments=images_per_batch * seq_size // 4)['x'].reshape((batch_size * images_per_batch * seq_size // 4, self.hidden_size))
         # 'x': (1, 945, 768), 'idx_oh': (1,945,945), (945, 768)
         
+        t2v_out = one_hot_pool(is_pool,
+               idx=t2v_cumulative_idx,
+               v=vision_out['target_seq_attnpool'].reshape(batch_size, images_per_batch * seq_size // 4, -1),
+               num_segments=images_per_batch * seq_size // 4)['x'].reshape((batch_size * images_per_batch * seq_size // 4, self.hidden_size))
+        
         log_scales = jnp.clip(self.scale_params.astype(jnp.float32), a_max=np.log(100.0))
+        ########## EDITING/ ADDED W/O PERTURBATION
+        # log_scales = jnp.clip(self.scale_params_retrain.astype(jnp.float32), a_max=np.log(100.0))
+        ##########
+        
         outputs = {
-            'audio2vision': {'x': a2v, 'y': vision_out['target_seq_attnpool'].reshape(batch_size * images_per_batch * seq_size // 4, -1), 'log_scale': log_scales[0]},
-            'text2vision': {'x': t2v, 'y': vision_out['target_seq_attnpool'].reshape(batch_size * images_per_batch * seq_size // 4, -1), 'log_scale': log_scales[1]},
+            'audio2vision': {'x': a2v, 'y': a2v_out, 'log_scale': log_scales[0]},
+            'text2vision': {'x': t2v, 'y': t2v_out, 'log_scale': log_scales[1]},
         }
         
         for k in outputs:
@@ -301,9 +339,15 @@ class MerlotReserveTVQA(MerlotReserve):
                 if self.use_bfloat16:
                     outputs[k][k2] = outputs[k][k2].astype(jnp.bfloat16)
 
+#         pool_idx = jnp.argmax((jnp.concatenate([audio_toks, text_toks], 0) == MASKVIDEO).astype(jnp.float32), 1)
+#         pooled_h = joint_enc[jnp.arange(batch_size * 2 * num_ans_per), pool_idx]
+#         joint_enc = jnp.squeeze(self.proj(pooled_h), -1)
 
-        return outputs
+#         logits_from_audio, logits_from_text = jnp.split(joint_enc, 2, axis=0)
+#         logits_from_audio = logits_from_audio.reshape(batch_size, num_ans_per)
+#         logits_from_text = logits_from_text.reshape(batch_size, num_ans_per)
 
+        return outputs #logits_from_audio, logits_from_text
 
 model = MerlotReserveTVQA.from_config(config)
 
@@ -355,26 +399,42 @@ def train_loss_fn(state, params, batch):
     loss = sum([v for k, v in loss_info.items() if not k.startswith('_')])
     return loss, loss_info
 
+def loss_fn_given_preds(preds):
+    loss_info = {}
+    
+    for c_type, c_dict in preds.items():
+        numer_logits = (c_dict['x'] * c_dict['y']).sum(-1) # (945)
+        loss_info[c_type] = 0.0
 
+        # For both directions (average the result)
+        for k1, k2 in ['xy', 'yx']:
+            x = c_dict[k1] # (945,768)
+            y = c_dict[k2] # (945,768)
+
+            # Add in extra things that are only valid as targets
+            y_allgather = jax.lax.all_gather(y, 'batch').reshape(-1, x.shape[-1]) # (7560, 768)
+
+            print(f"{c_type} {k1}->{k2} dot product sim:  shaped [{x.shape}] -> [{y_allgather.shape}]", flush=True) 
+            # logging.info(f"{c_type} {k1}->{k2} dot product sim:  shaped [{x.shape}] -> [{y_allgather.shape}]")
+            denom_logits = jnp.einsum('lh,vh->lv', x, y_allgather) # (945,7560)
+            
+            denom_lse = jax.nn.logsumexp(denom_logits.astype(jnp.float32), axis=-1) # (945)
+            loss_info[c_type] += (denom_lse - numer_logits).mean() / 2.0 
+            
+    loss = sum([v for k, v in loss_info.items() if not k.startswith('_')])
+    return loss, loss_info
 
 p_train_step = jax.pmap(functools.partial(finetune_train_step, loss_fn=train_loss_fn, tx_fns=tx_fns, scan_minibatch=args.scan_minibatch),
                                           axis_name='batch', donate_argnums=(0,1))
 
 def pred_step(state: train_state.TrainState, batch):
-    logits_from_audio, logits_from_text = state.apply_fn({'params': state.params}, batch)
-
-    out = {'logprobs_audio': jax.nn.log_softmax(logits_from_audio, axis=-1),
-            'preds_audio': jnp.argmax(logits_from_audio, -1),
-            'logprobs_text': jax.nn.log_softmax(logits_from_text, axis=-1),
-            'preds_text': jnp.argmax(logits_from_text, -1),
-            }
-    softmax_joint = jax.nn.softmax(logits_from_audio, axis=-1) + jax.nn.softmax(logits_from_text, axis=-1)
-    out['preds_joint'] = jnp.argmax(softmax_joint, -1)
-    return out
+    # logits_from_audio, logits_from_text = state.apply_fn({'params': state.params}, batch)
+    preds = state.apply_fn({'params': state.params}, batch)
+    return preds
 
 
 p_pred_step = jax.pmap(pred_step, axis_name='batch', donate_argnums=(1,))
-
+loss_megabatch_pmap = jax.pmap(loss_fn_given_preds, axis_name='batch', donate_argnums=(0,))
 
 def val_epoch(state: train_state.TrainState):
     """
@@ -383,45 +443,83 @@ def val_epoch(state: train_state.TrainState):
     :return:
     """
     val_config = deepcopy(config)
-    val_config['data']['val_fns'] = os.path.join(os.environ["TFRECORDS_PATH"], "val{:03d}of008.tfrecord")
-    val_config['data']['num_val_files'] = 8
+    val_config['data']['val_fns'] = os.path.join(os.environ["TFRECORDS_PATH"], "val{:03d}of061.tfrecord")
+    val_config['data']['num_val_files'] = 61
     val_config['data']['do_random_scale'] = False
     val_config['data']['batch_size'] = args.val_batch_size
+    num_accumulations = 8
 
     val_iter = finetune_val_input_fn_builder(val_config, 'tvqa')
 
     text_preds = []
     audio_preds = []
     joint_preds = []
+    agg_loss_info = []
+    outs = []
 
     for ids, batch in val_iter:
-        val_pred = p_pred_step(state, batch)
-        preds_joint = val_pred['preds_joint'].reshape(-1)
-        preds_audio = val_pred['preds_audio'].reshape(-1)
-        preds_text = val_pred['preds_text'].reshape(-1)
+        out = p_pred_step(state, batch)
+        outs.append(out)
+        
+        # Have enough to accumulate
+        if len(outs) == num_accumulations:
+            megabatch = jax.tree_multimap(lambda *xs: jnp.concatenate(xs, 1), *outs)
+            loss_info = loss_megabatch_pmap(megabatch)[1]
+            loss_info = jax.tree_map(lambda x: float(x.mean()), loss_info)
+            agg_loss_info.append(loss_info)
+            outs = []
+    
+    avg_loss_info = pd.DataFrame(agg_loss_info).mean(0)
+    
+    return avg_loss_info
 
-        labels = batch['labels'].reshape(-1)
-        for (p_j, p_a, p_t, id_i, label_i) in zip(val_pred['preds_joint'].reshape(-1),
-                                                  val_pred['preds_audio'].reshape(-1),
-                                                  val_pred['preds_text'].reshape(-1), ids, labels):
-            if id_i == 'pad':
-                continue
-            text_preds.append({'pred': p_t, 'label': label_i, 'id': id_i})
-            audio_preds.append({'pred': p_a, 'label': label_i, 'id': id_i})
-            joint_preds.append({'pred': p_j, 'label': label_i, 'id': id_i})
 
-    text_preds = pd.DataFrame(text_preds)
-    text_preds['is_right'] = text_preds['pred'] == text_preds['label']
-    text_acc = text_preds['is_right'].mean()
+# def val_epoch(state: train_state.TrainState):
+#     """
+#     perform a validation epoch
+#     :param state:
+#     :return:
+#     """
+#     val_config = deepcopy(config)
+#     val_config['data']['val_fns'] = os.path.join(os.environ["TFRECORDS_PATH"], "val{:03d}of061.tfrecord")
+#     val_config['data']['num_val_files'] = 61
+#     val_config['data']['do_random_scale'] = False
+#     val_config['data']['batch_size'] = args.val_batch_size
 
-    audio_preds = pd.DataFrame(audio_preds)
-    audio_preds['is_right'] = audio_preds['pred'] == audio_preds['label']
-    audio_acc = audio_preds['is_right'].mean()
+#     val_iter = finetune_val_input_fn_builder(val_config, 'tvqa')
 
-    joint_preds = pd.DataFrame(joint_preds)
-    joint_preds['is_right'] = joint_preds['pred'] == joint_preds['label']
-    joint_acc = joint_preds['is_right'].mean()
-    return {'text_acc': text_acc, 'audio_acc': audio_acc, 'joint_acc': joint_acc}
+#     text_preds = []
+#     audio_preds = []
+#     joint_preds = []
+
+#     for ids, batch in val_iter:
+#         val_pred = p_pred_step(state, batch)
+#         preds_joint = val_pred['preds_joint'].reshape(-1)
+#         preds_audio = val_pred['preds_audio'].reshape(-1)
+#         preds_text = val_pred['preds_text'].reshape(-1)
+
+#         labels = batch['labels'].reshape(-1)
+#         for (p_j, p_a, p_t, id_i, label_i) in zip(val_pred['preds_joint'].reshape(-1),
+#                                                   val_pred['preds_audio'].reshape(-1),
+#                                                   val_pred['preds_text'].reshape(-1), ids, labels):
+#             if id_i == 'pad':
+#                 continue
+#             text_preds.append({'pred': p_t, 'label': label_i, 'id': id_i})
+#             audio_preds.append({'pred': p_a, 'label': label_i, 'id': id_i})
+#             joint_preds.append({'pred': p_j, 'label': label_i, 'id': id_i})
+
+#     text_preds = pd.DataFrame(text_preds)
+#     text_preds['is_right'] = text_preds['pred'] == text_preds['label']
+#     text_acc = text_preds['is_right'].mean()
+
+#     audio_preds = pd.DataFrame(audio_preds)
+#     audio_preds['is_right'] = audio_preds['pred'] == audio_preds['label']
+#     audio_acc = audio_preds['is_right'].mean()
+
+#     joint_preds = pd.DataFrame(joint_preds)
+#     joint_preds['is_right'] = joint_preds['pred'] == joint_preds['label']
+#     joint_acc = joint_preds['is_right'].mean()
+#     return {'text_acc': text_acc, 'audio_acc': audio_acc, 'joint_acc': joint_acc}
 
 train_metrics = []
 log_every = config['device'].get('commit_every_nsteps', 50)
@@ -431,7 +529,7 @@ time_elapsed = []
 for n in range(config['optimizer']['num_train_steps']+100):
     st = time.time()
     id_, batch = next(ds_train_iter)
-    state, loss_info, loss = p_train_step(state, batch)
+    state, loss_info = p_train_step(state, batch)
 
     if jax.process_index() == 0:
         train_metrics.append(jax.tree_map(lambda x: x[0], loss_info))
@@ -454,10 +552,14 @@ for n in range(config['optimizer']['num_train_steps']+100):
             print("Done 1 epoch", flush=True)
 
             save_checkpoint(state, path=config['device']['output_dir'], no_optimizer=True)
-            # val_info = val_epoch(state)
-            # print(f"Saving @iter {n:03d}.\nInfo: {pd.Series(val_info)}\n~\n", flush=True)
-            # if wandb is not None:
-            #     wandb.log({k + '_val': v for k, v in val_info.items()}, step=step_for_logging, commit=True)
+            val_info = val_epoch(state)
+            print(f"Saving @iter {n:03d}.\nInfo: {pd.Series(val_info)}\n~\n", flush=True)
+            if wandb is not None:
+                audio2vision_val_loss = val_info['audio2vision']
+                text2vision_val_loss = val_info['text2vision']
+                wandb.log({"audio2vision_val_loss": audio2vision_val_loss}, step=step_for_logging, commit=(n + 1) % log_every == 0)
+                wandb.log({"text2vision_val_loss": text2vision_val_loss}, step=step_for_logging, commit=(n + 1) % log_every == 0)
+                # wandb.log({k + '_val': v for k, v in val_info.items()}, step=step_for_logging, commit=True)
 
         time_elapsed.append(time.time() - st)
         if len(time_elapsed) >= 100:
