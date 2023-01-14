@@ -2,6 +2,7 @@
 Convert TVQA into tfrecords
 """
 import sys
+import csv
 
 sys.path.append('/work/sheryl/merlot_reserve')
 import argparse
@@ -141,6 +142,54 @@ with open(split_fn, 'r') as f:
 ts_lens = [x['ts'][1] - x['ts'][0] for x in data]
 max_end = max([x['ts'][1] for x in data])
 
+def generate_mask_w_bb(image, box, fbbox):
+    
+    arr_img = np.asarray(image)
+    bmask = Image.fromarray(np.zeros_like(arr_img))
+    fmask = Image.fromarray(np.zeros_like(arr_img))
+    final_fbbox = []
+    final_bbox = []
+
+    if len(box) == 0:
+        return bmask, fmask, final_bbox, final_fbbox
+    
+    for b, fb in zip(box, fbbox):
+        img1 = ImageDraw.Draw(bmask)  
+        img1.rectangle(b, fill ="#ffffff")
+        final_bbox.append(np.array(b))
+        
+        region = np.array(image.crop(b))
+        targetSize = region.shape
+        x_, y_ = 224, 224
+        x_scale = targetSize[1] / x_
+        y_scale = targetSize[0] / y_
+
+        (origLeft, origTop, origRight, origBottom) = fb
+
+        x = int(np.round(origLeft * x_scale))
+        y = int(np.round(origTop * y_scale))
+        xmax = int(np.round(origRight * x_scale))
+        ymax = int(np.round(origBottom * y_scale))
+
+        final_fb = [b[0]+x, b[1]+y, b[0]+xmax, b[1]+ymax]
+
+        img2 = ImageDraw.Draw(fmask)  
+        img2.rectangle(final_fb, fill ="#ffffff")
+        final_fbbox.append(np.array(final_fb))
+    
+    return bmask, fmask, final_bbox, final_fbbox
+
+def read_bbox(filename):
+    im_face_dict = {}
+    with open(filename, mode ='r')as file:
+        csvFile = csv.reader(file)
+        for i, lines in enumerate(csvFile):
+            if i == 0:
+                continue
+            assert f'{lines[0]}.jpg' not in im_face_dict
+            im_face_dict[f'{lines[0]}.jpg'] = {'box': json.loads(lines[1]), 'fbox': json.loads(lines[2])}
+    return im_face_dict
+
 def parse_item(item):
     answer_num = 0
     answer_choices = []
@@ -153,6 +202,9 @@ def parse_item(item):
 
     frames_path = os.path.join(args.data_dir, 'frames',
                             item['vid_name'] + "_trimmed-out")
+    name = item['vid_name']
+    frames_bbox_path = os.path.join("/work/sheryl/siq_detections/siq_face_bboxes_full", f'3fps_{name}_trimmed-out_bbox_w_faces.json')
+    im_face_dict = read_bbox(frames_bbox_path)
 
     max_frame_no = max([int(x.split('_')[-1].split('.')[0]) for x in os.listdir(frames_path)])
     max_time = (max_frame_no - 1) / 3.0
@@ -191,6 +243,10 @@ def parse_item(item):
 
     ###
     frames = []
+    frames_bmasks = []
+    frames_fmasks = []
+    bboxes = []
+    fbboxes = []
     times_used = []
     for trow in times_used0:
         t_midframe = (trow['start_time'] + trow['end_time']) / 2.0
@@ -199,10 +255,25 @@ def parse_item(item):
         t_mid_3ps_idx = min(t_mid_3ps_idx, max_frame_no)
 
         fn = os.path.join(frames_path, item['vid_name'] + "_trimmed-out_" + f'{t_mid_3ps_idx:03d}.jpg')
+
+        if f'{t_mid_3ps_idx:05d}.jpg' in im_face_dict:
+            bbox = im_face_dict[f'{t_mid_3ps_idx:05d}.jpg']['box']
+            fbbox = im_face_dict[f'{t_mid_3ps_idx:05d}.jpg']['fbox']
+        else:
+            bbox = []
+            fbbox = []
+
         if os.path.exists(fn):
             image = Image.open(fn)
+            bmask, fmask, final_bbox, final_fbbox = generate_mask_w_bb(image, bbox, fbbox)
             image = resize_image(image, shorter_size_trg=450, longer_size_max=800)
             frames.append(image)
+            bmask = resize_image(bmask, shorter_size_trg=450, longer_size_max=800)
+            fmask = resize_image(fmask, shorter_size_trg=450, longer_size_max=800)
+            frames_bmasks.append(bmask)
+            frames_fmasks.append(fmask)
+            bboxes.append(final_bbox)
+            fbboxes.append(final_fbbox)
             times_used.append(trow)
         else:
             print(f"{fn} doesn't exist")
@@ -300,15 +371,19 @@ def parse_item(item):
     for i in range(7 - len(frames)):
         frames.append(frames[-1])
         spectrograms.append(spectrograms[-1])
+        frames_bmasks.append(frames_bmasks[-1])
+        frames_fmasks.append(frames_fmasks[-1])
+        bboxes.append(bboxes[-1])
+        fbboxes.append(fbboxes[-1])
         times_used.append({'start_time': -1, 'end_time': -1, 'sub': ''})
 
-    return qa_item, frames, spectrograms, times_used
+    return qa_item, frames, frames_bmasks, frames_fmasks, bboxes, fbboxes, spectrograms, times_used
 
 num_written = 0
 max_len = 0
 with GCSTFRecordWriter(out_fn, auto_close=False) as tfrecord_writer:
     for item in data:
-        qa_item, frames, specs, subs = parse_item(item)
+        qa_item, frames, frames_bmasks, frames_fmasks, bboxes, fbboxes, specs, subs = parse_item(item)
 
         # Tack on the relative position of the localized timestamp, plus a START token for separation
         query_enc = encoder.encode(qa_item['qa_query']).ids
@@ -330,8 +405,15 @@ with GCSTFRecordWriter(out_fn, auto_close=False) as tfrecord_writer:
             feature_dict[f'qa_choice_{i}'] = int64_list_feature(choice_i.ids)
             max_query = max(len(choice_i.ids) + len(query_enc), max_query)
 
-        for i, (frame_i, spec_i, subs_i) in enumerate(zip(frames, specs, subs)):
+        for i, (frame_i, bmask_i, fmask_i, bbox_i, fbbox_i, spec_i, subs_i) in enumerate(zip(frames, frames_bmasks, frames_fmasks, bboxes, fbboxes, specs, subs)):
             feature_dict[f'c{i:02d}/image_encoded'] = bytes_feature(pil_image_to_jpgstring(frame_i))
+            feature_dict[f'c{i:02d}/bmasks_encoded'] = bytes_feature(pil_image_to_jpgstring(bmask_i))
+            feature_dict[f'c{i:02d}/fmasks_encoded'] = bytes_feature(pil_image_to_jpgstring(fmask_i))
+
+            bbox_1d = [x for val in bbox_i for x in val]
+            fbbox_1d = [x for val in fbbox_i for x in val]
+            feature_dict[f'c{i:02d}/bbox'] = float_list_feature(bbox_1d)
+            feature_dict[f'c{i:02d}/fbbox'] = float_list_feature(fbbox_1d)
 
             compressed = np.minimum(spec_i.reshape(-1, 65) * qa_item['magic_number'], 255.0).astype(np.uint8)
             assert compressed.shape == (180, 65)
