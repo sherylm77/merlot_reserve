@@ -4,7 +4,7 @@ Convert TVQA into tfrecords
 import sys
 import csv
 
-sys.path.append('/work/sheryl/merlot_reserve')
+# sys.path.append('/work/sheryl/merlot_reserve')
 import argparse
 import hashlib
 import io
@@ -34,13 +34,16 @@ from mreserve.lowercase_encoder import START
 import pysrt
 from unidecode import unidecode
 import ftfy
+from dotenv import load_dotenv
+
+load_dotenv('../../.env')
 
 
 parser = create_base_parser()
 parser.add_argument(
     '-data_dir',
     dest='data_dir',
-    default='/work/sheryl/raw/',
+    default=os.environ["DATA_DIR"],
     type=str,
     help='Image directory.'
 )
@@ -118,14 +121,16 @@ random.seed(args.seed)
 #     temp_num_folds = 8
 # temp_data_dir = '/home/sheryl/raw/'
 
-out_fn = os.path.join(args.base_fn, 'siq', '{}{:03d}of{:03d}.tfrecord'.format(args.split, args.fold, args.num_folds))
+using_face_bbox = os.environ["FBBOX_PATH"] != ""
+
+out_fn = os.path.join(os.environ["DATA_DIR"], 'siq', '{}{:03d}of{:03d}.tfrecord'.format(args.split, args.fold, args.num_folds))
 
 split_fn = {
-    'train': 'siq_train4.jsonl',
-    'val': 'siq_val4.jsonl',
+    'train': 'siq1_train.jsonl',
+    'val': 'siq1_val.jsonl',
     #'test': 'tvqa_test_public.jsonl',
 }[args.split]
-split_fn = os.path.join(args.data_dir, 'siq_qa_release', split_fn)
+split_fn = os.path.join(os.environ["DATA_DIR"], 'siq_qa_release', split_fn)
 
 data = []
 with open(split_fn, 'r') as f:
@@ -203,8 +208,11 @@ def parse_item(item):
     frames_path = os.path.join(args.data_dir, 'frames',
                             item['vid_name'] + "_trimmed-out")
     name = item['vid_name']
-    frames_bbox_path = os.path.join("/work/sheryl/siq_detections/siq_face_bboxes_full", f'3fps_{name}_trimmed-out_bbox_w_faces.json')
-    im_face_dict = read_bbox(frames_bbox_path)
+
+    # if using face bounding boxes
+    if using_face_bbox:
+        frames_bbox_path = os.path.join(os.environ["FBBOX_PATH"], f'3fps_{name}_trimmed-out_bbox_w_faces.json')
+        im_face_dict = read_bbox(frames_bbox_path)
 
     max_frame_no = max([int(x.split('_')[-1].split('.')[0]) for x in os.listdir(frames_path)])
     max_time = (max_frame_no - 1) / 3.0
@@ -256,30 +264,33 @@ def parse_item(item):
 
         fn = os.path.join(frames_path, item['vid_name'] + "_trimmed-out_" + f'{t_mid_3ps_idx:03d}.jpg')
 
-        if f'{t_mid_3ps_idx:05d}.jpg' in im_face_dict:
-            bbox = im_face_dict[f'{t_mid_3ps_idx:05d}.jpg']['box']
-            fbbox = im_face_dict[f'{t_mid_3ps_idx:05d}.jpg']['fbox']
-        else:
-            bbox = []
-            fbbox = []
+        if using_face_bbox:
+            if f'{t_mid_3ps_idx:05d}.jpg' in im_face_dict:
+                bbox = im_face_dict[f'{t_mid_3ps_idx:05d}.jpg']['box']
+                fbbox = im_face_dict[f'{t_mid_3ps_idx:05d}.jpg']['fbox']
+            else:
+                bbox = []
+                fbbox = []
 
         if os.path.exists(fn):
             image = Image.open(fn)
-            bmask, fmask, final_bbox, final_fbbox = generate_mask_w_bb(image, bbox, fbbox)
-            image = resize_image(image, shorter_size_trg=450, longer_size_max=800)
             frames.append(image)
-            bmask = resize_image(bmask, shorter_size_trg=450, longer_size_max=800)
-            fmask = resize_image(fmask, shorter_size_trg=450, longer_size_max=800)
-            frames_bmasks.append(bmask)
-            frames_fmasks.append(fmask)
-            bboxes.append(final_bbox)
-            fbboxes.append(final_fbbox)
             times_used.append(trow)
+
+            if using_face_bbox:
+                bmask, fmask, final_bbox, final_fbbox = generate_mask_w_bb(image, bbox, fbbox)
+                image = resize_image(image, shorter_size_trg=450, longer_size_max=800)
+                bmask = resize_image(bmask, shorter_size_trg=450, longer_size_max=800)
+                fmask = resize_image(fmask, shorter_size_trg=450, longer_size_max=800)
+                frames_bmasks.append(bmask)
+                frames_fmasks.append(fmask)
+                bboxes.append(final_bbox)
+                fbboxes.append(final_fbbox)
         else:
             print(f"{fn} doesn't exist")
 
 
-    audio_fn_mp3 = os.path.join(args.data_dir, 'acoustic_mp3', item['vid_name'] + "_trimmed-out.mp3")
+    audio_fn_mp3 = os.path.join(os.environ["MP3_PATH"], item['vid_name'] + "_trimmed-out.mp3")
     # Start the process
     temp_folder = tempfile.TemporaryDirectory()
     audio_fn = os.path.join(temp_folder.name, 'audio.wav')
@@ -329,7 +340,7 @@ def parse_item(item):
     # Get subtitles
     #############################################################
     show_subname = item['vid_name'] + "-trimmed"
-    sub_fn = os.path.join(args.data_dir, 'transcript', show_subname + '.en.vtt')
+    sub_fn = os.path.join(os.environ["TRANSCRIPT_PATH"], show_subname + '.en.vtt')
     if not os.path.exists(sub_fn):
         print(sub_fn)
         import ipdb
@@ -371,19 +382,26 @@ def parse_item(item):
     for i in range(7 - len(frames)):
         frames.append(frames[-1])
         spectrograms.append(spectrograms[-1])
-        frames_bmasks.append(frames_bmasks[-1])
-        frames_fmasks.append(frames_fmasks[-1])
-        bboxes.append(bboxes[-1])
-        fbboxes.append(fbboxes[-1])
+        if using_face_bbox:
+            frames_bmasks.append(frames_bmasks[-1])
+            frames_fmasks.append(frames_fmasks[-1])
+            bboxes.append(bboxes[-1])
+            fbboxes.append(fbboxes[-1])
         times_used.append({'start_time': -1, 'end_time': -1, 'sub': ''})
 
-    return qa_item, frames, frames_bmasks, frames_fmasks, bboxes, fbboxes, spectrograms, times_used
+    if using_face_bbox:
+        return qa_item, frames, frames_bmasks, frames_fmasks, bboxes, fbboxes, spectrograms, times_used
+    else:
+        return qa_item, frames, spectrograms, times_used
 
 num_written = 0
 max_len = 0
 with GCSTFRecordWriter(out_fn, auto_close=False) as tfrecord_writer:
     for item in data:
-        qa_item, frames, frames_bmasks, frames_fmasks, bboxes, fbboxes, specs, subs = parse_item(item)
+        if using_face_bbox:
+            qa_item, frames, frames_bmasks, frames_fmasks, bboxes, fbboxes, specs, subs = parse_item(item)
+        else:
+            qa_item, frames, specs, subs = parse_item(item)
 
         # Tack on the relative position of the localized timestamp, plus a START token for separation
         query_enc = encoder.encode(qa_item['qa_query']).ids
@@ -405,22 +423,33 @@ with GCSTFRecordWriter(out_fn, auto_close=False) as tfrecord_writer:
             feature_dict[f'qa_choice_{i}'] = int64_list_feature(choice_i.ids)
             max_query = max(len(choice_i.ids) + len(query_enc), max_query)
 
-        for i, (frame_i, bmask_i, fmask_i, bbox_i, fbbox_i, spec_i, subs_i) in enumerate(zip(frames, frames_bmasks, frames_fmasks, bboxes, fbboxes, specs, subs)):
-            feature_dict[f'c{i:02d}/image_encoded'] = bytes_feature(pil_image_to_jpgstring(frame_i))
-            feature_dict[f'c{i:02d}/bmasks_encoded'] = bytes_feature(pil_image_to_jpgstring(bmask_i))
-            feature_dict[f'c{i:02d}/fmasks_encoded'] = bytes_feature(pil_image_to_jpgstring(fmask_i))
+        if using_face_bbox:
+            for i, (frame_i, bmask_i, fmask_i, bbox_i, fbbox_i, spec_i, subs_i) in enumerate(zip(frames, frames_bmasks, frames_fmasks, bboxes, fbboxes, specs, subs)):
+                feature_dict[f'c{i:02d}/image_encoded'] = bytes_feature(pil_image_to_jpgstring(frame_i))
+                feature_dict[f'c{i:02d}/bmasks_encoded'] = bytes_feature(pil_image_to_jpgstring(bmask_i))
+                feature_dict[f'c{i:02d}/fmasks_encoded'] = bytes_feature(pil_image_to_jpgstring(fmask_i))
 
-            bbox_1d = [x for val in bbox_i for x in val]
-            fbbox_1d = [x for val in fbbox_i for x in val]
-            feature_dict[f'c{i:02d}/bbox'] = float_list_feature(bbox_1d)
-            feature_dict[f'c{i:02d}/fbbox'] = float_list_feature(fbbox_1d)
+                bbox_1d = [x for val in bbox_i for x in val]
+                fbbox_1d = [x for val in fbbox_i for x in val]
+                feature_dict[f'c{i:02d}/bbox'] = float_list_feature(bbox_1d)
+                feature_dict[f'c{i:02d}/fbbox'] = float_list_feature(fbbox_1d)
 
-            compressed = np.minimum(spec_i.reshape(-1, 65) * qa_item['magic_number'], 255.0).astype(np.uint8)
-            assert compressed.shape == (180, 65)
-            feature_dict[f'c{i:02d}/spec_encoded'] = bytes_feature(pil_image_to_jpgstring(Image.fromarray(compressed)))
+                compressed = np.minimum(spec_i.reshape(-1, 65) * qa_item['magic_number'], 255.0).astype(np.uint8)
+                assert compressed.shape == (180, 65)
+                feature_dict[f'c{i:02d}/spec_encoded'] = bytes_feature(pil_image_to_jpgstring(Image.fromarray(compressed)))
 
-            feature_dict[f'c{i:02d}/sub'] = int64_list_feature(encoder.encode(subs_i['sub']).ids)
-            max_query += len(feature_dict[f'c{i:02d}/sub'].int64_list.value)
+                feature_dict[f'c{i:02d}/sub'] = int64_list_feature(encoder.encode(subs_i['sub']).ids)
+                max_query += len(feature_dict[f'c{i:02d}/sub'].int64_list.value)
+        else:
+            for i, (frame_i, spec_i, subs_i) in enumerate(zip(frames, specs, subs)):
+                feature_dict[f'c{i:02d}/image_encoded'] = bytes_feature(pil_image_to_jpgstring(frame_i))
+
+                compressed = np.minimum(spec_i.reshape(-1, 65) * qa_item['magic_number'], 255.0).astype(np.uint8)
+                assert compressed.shape == (180, 65)
+                feature_dict[f'c{i:02d}/spec_encoded'] = bytes_feature(pil_image_to_jpgstring(Image.fromarray(compressed)))
+
+                feature_dict[f'c{i:02d}/sub'] = int64_list_feature(encoder.encode(subs_i['sub']).ids)
+                max_query += len(feature_dict[f'c{i:02d}/sub'].int64_list.value)
         max_len = max(max_len, max_query)
 
         if num_written < 4:

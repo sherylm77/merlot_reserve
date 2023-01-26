@@ -7,14 +7,17 @@ import random
 
 sys.path.append("/work/sheryl")
 
-from raw import socialiq_std_folds
+# from raw import socialiq_std_folds
 
-def make_json_for(vids, file_name, binary_task):
+def make_json_for(vids_path, json_file_path, qa_path, binary_task):
+    vids = os.listdir(vids_path)
+    file_name = open(json_file_path, "w")
+
     for vid in vids:
         vid_name = vid + "_trimmed-out.mp4"
-        vid_length = subprocess.check_output(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=duration', '-of', 'default=noprint_wrappers=1:nokey=1', os.path.join("/work/sheryl/raw/vision/raw", vid_name)])
+        vid_length = subprocess.check_output(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=duration', '-of', 'default=noprint_wrappers=1:nokey=1', os.path.join(vids_path, vid_name)])
         
-        vid_filename = os.path.join("/work/sheryl/raw/qa", vid + "_trimmed.txt")
+        vid_filename = os.path.join(qa_path, vid + "_trimmed.txt")
         vid_file = open(vid_filename, "r") 
 
         file_end = False
@@ -104,13 +107,11 @@ def make_json_for(vids, file_name, binary_task):
                         vid_file.seek(pos)
                         break    
 
-train_vids = socialiq_std_folds.standard_train_fold
-val_vids = socialiq_std_folds.standard_valid_fold
+# train_vids = socialiq_std_folds.standard_train_fold
+# val_vids = socialiq_std_folds.standard_valid_fold
 
-all_vids = os.listdir("/work/sheryl/raw/vision/raw")
+# train_file = open("/work/sheryl/raw/siq_train2.jsonl", "w")
+# val_file = open("/work/sheryl/raw/siq_val2.jsonl", "w")
 
-train_file = open("/work/sheryl/raw/siq_train2.jsonl", "w")
-val_file = open("/work/sheryl/raw/siq_val2.jsonl", "w")
-
-make_json_for(train_vids, train_file, True)
-make_json_for(val_vids, val_file, True)
+# make_json_for(train_vids, train_file, True)
+# make_json_for(val_vids, val_file, True)

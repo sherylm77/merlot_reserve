@@ -8,7 +8,7 @@ import shutil
 import sys
 
 sys.path.append('../../')
-sys.path.append('/home/sheryl/merlot_reserve')
+# sys.path.append('/home/sheryl/merlot_reserve')
 import yaml
 from datetime import datetime
 import pytz
@@ -53,7 +53,7 @@ parser.add_argument(
     '-ckpt',
     help='checkpoint to use',
     type=str,
-    default="../../../base_resadapt",
+    default="../../../base.ckpt",
 )
 parser.add_argument(
     '--lr',
@@ -65,7 +65,7 @@ parser.add_argument(
     '-ne',
     help='ne',
     type=int,
-    default=20,
+    default=3,
 )
 parser.add_argument(
     '-output_grid_h',
@@ -110,8 +110,8 @@ with open(args.pretrain_config_file, 'r') as f:
     config = yaml.load(f, yaml.FullLoader)
 
 
-config['data']['train_fns'] = os.path.join(os.environ["TFRECORDS_PATH"], "train{:03d}of833.tfrecord")
-config['data']['num_train_files'] = 833
+config['data']['train_fns'] = os.path.join(os.environ["TFRECORDS_PATH"], "train{:03d}of" + os.environ["NUM_TRAIN_TFRECORDS"] + ".tfrecord")
+config['data']['num_train_files'] = os.environ["NUM_TRAIN_TFRECORDS"]
 config['data']['num_answers'] = 4
 config['data']['random_scale_max'] = 1.1
 config['data']['random_scale_min'] = 1.0
@@ -119,10 +119,10 @@ config['data']['num_segments'] = 7
 
 config['device']['batch_size'] = 8
 config['device']['prefetch_size'] = 0
-config['device']['n_fns_per_cycle'] = 833
+config['device']['n_fns_per_cycle'] = os.environ["NUM_TRAIN_TFRECORDS"]
 
 NUM_EPOCH = args.ne
-TRAIN_SIZE = 21 * config['data']['num_train_files']
+TRAIN_SIZE = 17494
 steps_per_epoch = TRAIN_SIZE // config['device']['batch_size']
 config['optimizer'] = {
     'beta_2': 0.98,
@@ -328,8 +328,8 @@ def val_epoch(state: train_state.TrainState):
     :return:
     """
     val_config = deepcopy(config)
-    val_config['data']['val_fns'] = os.path.join(os.environ["TFRECORDS_PATH"], "val{:03d}of061.tfrecord")
-    val_config['data']['num_val_files'] = 61
+    val_config['data']['val_fns'] = os.path.join(os.environ["TFRECORDS_PATH"], "val{:03d}of" + os.environ["NUM_VAL_TFRECORDS"] + ".tfrecord")
+    val_config['data']['num_val_files'] = os.environ["NUM_VAL_TFRECORDS"]
     val_config['data']['do_random_scale'] = False
     val_config['data']['batch_size'] = args.val_batch_size
 
@@ -366,7 +366,8 @@ def val_epoch(state: train_state.TrainState):
     joint_preds = pd.DataFrame(joint_preds)
     joint_preds['is_right'] = joint_preds['pred'] == joint_preds['label']
     joint_acc = joint_preds['is_right'].mean()
-    wandb.log({'val_joint_acc': joint_acc, 'val_text_acc': text_acc, 'val_audio_acc': audio_acc})
+    if wandb is not None:
+        wandb.log({'val_joint_acc': joint_acc, 'val_text_acc': text_acc, 'val_audio_acc': audio_acc})
     return {'text_acc': text_acc, 'audio_acc': audio_acc, 'joint_acc': joint_acc}
 
 train_metrics = []
@@ -402,8 +403,6 @@ for n in range(config['optimizer']['num_train_steps']+100):
             print(f"Saving @iter {n:03d}.\nInfo: {pd.Series(val_info)}\n~\n", flush=True)
             if wandb is not None:
                 wandb.log({'joint_acc_val': val_info['joint_acc']}, step=step_for_logging, commit=True)
-                # wandb.log({k + '_val': v for k, v in val_info.items()}, step=step_for_logging, commit=True)
-            shutil.rmtree("/home/sheryl/out/base.yaml/")
 
         time_elapsed.append(time.time() - st)
         if len(time_elapsed) >= 100:
