@@ -9,22 +9,22 @@ import make_frames
 import make_json
 from dotenv import load_dotenv
 
-load_dotenv('../../.env')
+load_dotenv('/work/sheryl/merlot_reserve/.env')
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
     '--mp3',
-    help='file path for wav files to convert to mp3',
+    help='convert wav to mp3',
     action='store_true'
 )
 parser.add_argument(
     '--frames',
-    help='file path for videos to convert to frames',
+    help='convert (mp4) videos to frames',
     action='store_true'
 )
 parser.add_argument(
     '--json',
-    help='file path for qa to convert to train/val json files',
+    help='convert qa files to train/val json files',
     action='store_true'
 )
 parser.add_argument('--binary', 
@@ -35,14 +35,14 @@ parser.add_argument('--binary',
 args = parser.parse_args()
 
 if args.mp3:
-    make_mp3_from(os.environ["WAV_PATH"])
+    make_mp3.make_mp3_from(os.environ["WAV_PATH"], os.path.join(os.environ["DATA_DIR"], "acoustic_mp3"))
 
 if args.frames:
-    video_to_frames(os.environ["VIDEO_PATH"])
+    make_frames.video_to_frames(os.environ["VIDEO_PATH"], os.environ["DATA_DIR"])
 
 if args.json:
     # make json for train vids
-    make_json_for(os.environ["TRAIN_VIDS_PATH"], 
+    make_json.make_json_for(os.environ["TRAIN_VIDS_PATH"], 
                 os.path.join(os.environ["DATA_DIR"], "siq1_train.jsonl"), 
                 os.environ["QA_PATH"], args.binary)
     # make json for val vids
