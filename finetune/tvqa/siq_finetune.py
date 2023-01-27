@@ -53,7 +53,7 @@ parser.add_argument(
     '-ckpt',
     help='checkpoint to use',
     type=str,
-    default="../../../base.ckpt",
+    default=os.environ["CHKPT_PATH"],
 )
 parser.add_argument(
     '--lr',
