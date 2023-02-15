@@ -16,7 +16,7 @@ train_val_bmw, test_bmw = train_test_split(valid_ids["bmw"], test_size=0.2, trai
 train_bmw, val_bmw = train_test_split(train_val_bmw, test_size=0.125, train_size=0.875)
 
 split = {
-        "subsets": 
+        "subsets":
             {    
                 "youtubeclips": {"train": train_yt, "val": val_yt, "test": test_yt}, 
                 "movieclips": {"train": train_mv, "val": val_mv, "test": test_mv}, 

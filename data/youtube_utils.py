@@ -5,10 +5,10 @@ import json
 import os
 import re
 
-import googleapiclient.discovery
+# import googleapiclient.discovery
 import numpy as np
 from bs4 import BeautifulSoup
-from googleapiclient.http import HttpError
+# from googleapiclient.http import HttpError
 from youtube_dl import YoutubeDL, DownloadError
 from youtube_dl.utils import subtitles_filename, ExtractorError, encodeFilename
 import io
@@ -340,7 +340,7 @@ def download_transcript(id, cache_path):
     return transcript, info
 
 
-def download_video(id, cache_path):
+def download_video(id, cache_path, no_download):
     """
     Given an ID, download the video using HQ settings. (might need to turn this down, idk)
 
@@ -351,6 +351,7 @@ def download_video(id, cache_path):
     ydl_opts = {
         'writedescription': False,
         'writeinfojson': False,
+        'skip_download': no_download,
         'write_all_thumbnails': False,
         'writeautomaticsub': False,
         'cachedir': cache_path,

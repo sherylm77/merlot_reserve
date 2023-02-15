@@ -11,7 +11,7 @@ def find_active_videos(vids_path):
         vid_file_path = os.path.join(vids_path, "missing")
         result = youtube_utils.download_video(vid[:-index], vid_file_path, True)
         if result != None:
-            found_vids.append(vid)
+            found_vids.append(vid[:-index])
     return found_vids
 
 yt_ids = find_active_videos("/work/sheryl/raw/vision/raw")
