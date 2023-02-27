@@ -9,8 +9,10 @@ import re
 import numpy as np
 from bs4 import BeautifulSoup
 # from googleapiclient.http import HttpError
-from youtube_dl import YoutubeDL, DownloadError
-from youtube_dl.utils import subtitles_filename, ExtractorError, encodeFilename
+from yt_dlp import YoutubeDL, DownloadError
+# from youtube_dl import YoutubeDL, DownloadError
+# from youtube_dl.utils import subtitles_filename, ExtractorError, encodeFilename
+from yt_dlp.utils import subtitles_filename, ExtractorError, encodeFilename
 import io
 import time
 

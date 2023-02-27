@@ -6,12 +6,11 @@ dataset_path = "/work/sheryl/bmw/raw"
 
 def find_active_videos(vids_path):
     found_vids = []
-    index = 12 if "bmw" in vids_path or "movie" in vids_path else 16
     for vid in os.listdir(vids_path):
         vid_file_path = os.path.join(vids_path, "missing")
-        result = youtube_utils.download_video(vid[:-index], vid_file_path, True)
+        result = youtube_utils.download_video(vid[:-4], vid_file_path, True)
         if result != None:
-            found_vids.append(vid[:-index])
+            found_vids.append(vid[:-4])
     return found_vids
 
 yt_ids = find_active_videos("/work/sheryl/raw/vision/raw")
