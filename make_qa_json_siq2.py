@@ -16,7 +16,7 @@ def read_qa_in(dataset_path, vids, file_name, split):
     for vid in vids:
         vids_path = os.path.join(dataset_path, "vision")
         qa_path = os.path.join(dataset_path, "qa")
-        vid_name = vid + "_trimmed.mp4"
+        vid_name = vid + ".mp4"
         vid_length = subprocess.check_output(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=duration', '-of', 'default=noprint_wrappers=1:nokey=1', os.path.join(vids_path, vid_name)])
 
         vid_filename = os.path.join(qa_path, vid + ".txt")
