@@ -2,8 +2,6 @@ from data import youtube_utils
 import os
 import json
 
-dataset_path = "/work/sheryl/bmw/raw"
-
 def find_active_videos(dataset_path):
     found_vids = []
     vids_path = os.path.join(dataset_path, "vision")
@@ -12,7 +10,9 @@ def find_active_videos(dataset_path):
         vid = id[:-3] + "mp4"
         vid_file_path = os.path.join(vids_path, "missing")
         result = youtube_utils.download_video(vid[:-4], vid_file_path, True)
-        if result != None:
+        video_found = result != None
+        transcript_found = os.path.exists(os.path.join(dataset_path, "transcript", id[:-3]+"vtt"))
+        if video_found and transcript_found:
             found_vids.append(vid[:-4])
     return found_vids
 
