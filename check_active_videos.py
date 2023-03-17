@@ -1,6 +1,7 @@
 from data import youtube_utils
 import os
 import json
+import tempfile
 
 def find_active_videos(dataset_path):
     found_vids = []
@@ -11,9 +12,12 @@ def find_active_videos(dataset_path):
         vid_file_path = os.path.join(vids_path, "missing")
         result = youtube_utils.download_video(vid[:-4], vid_file_path, True)
         video_found = result != None
-        transcript_found = os.path.exists(os.path.join(dataset_path, "transcript", id[:-3]+"vtt"))
+        temp_folder = tempfile.TemporaryDirectory()
+        transcript, json_info = youtube_utils.download_transcript(vid[:-4], temp_folder.name)
+        transcript_found = transcript != []
         if video_found and transcript_found:
             found_vids.append(vid[:-4])
+        temp_folder.cleanup()
     return found_vids
 
 yt_ids = find_active_videos("/work/sheryl/raw")
