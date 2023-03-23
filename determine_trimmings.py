@@ -6,23 +6,30 @@ import os
 from data import youtube_utils
 import subprocess
 import json
+import tempfile
+from dotenv import load_dotenv
 
-full_videos_path = "/work/sheryl/full_videos"
-trimmed_audios_path = "/work/sheryl/movieclips/raw/acoustic"
+load_dotenv('/work/sheryl/merlot_reserve/.env')
+
+trimmed_audios_path = "/work/sheryl/siq2/acoustic/mp3"
 
 trims = {}
 
 videos_not_found = []
 
-for audio in os.listdir(trimmed_audios_path):
-    id = audio[:-4]
-    if id in ["jRgTg1vu5vw", "WzDQEuf_Sdo"]: continue
-    result = youtube_utils.download_video(id, full_videos_path, False)
+valid_ids_path = os.path.join(os.environ["DATA_DIR"], "siq2_qa_release/valid_ids.json")
+with open(valid_ids_path) as f:
+    valid_ids = json.load(f)
+
+all_valid_ids = valid_ids["youtubeclips"] + valid_ids["movieclips"] + valid_ids["bmw"]
+for id in all_valid_ids:
+    temp_folder = tempfile.TemporaryDirectory()
+    result = youtube_utils.download_video(id, temp_folder.name, False)
     if result == None:
         videos_not_found.append(id)
         continue
-    input_name = os.path.join(full_videos_path, id + ".mp4")
-    full_audio_path = os.path.join(full_videos_path, id + ".mp3")
+    input_name = os.path.join(temp_folder.name, id + ".mp4")
+    full_audio_path = os.path.join(temp_folder.name, id + ".mp3")
     subprocess.call('ffmpeg -i {video} -ar 22050 -ac 1 {out_name}'.format(video=input_name, out_name=full_audio_path), shell=True)
 
     trimmed_audio_path = os.path.join(trimmed_audios_path, id + ".mp3")
