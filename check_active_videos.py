@@ -9,10 +9,10 @@ def find_active_videos(dataset_path):
     qa_path = os.path.join(dataset_path, "qa")
     for id in os.listdir(qa_path):
         vid = id[:-3] + "mp4"
-        vid_file_path = os.path.join(vids_path, "missing")
-        result = youtube_utils.download_video(vid[:-4], vid_file_path, True)
-        video_found = result != None
         temp_folder = tempfile.TemporaryDirectory()
+        # vid_file_path = os.path.join(vids_path, "missing")
+        result = youtube_utils.download_video(vid[:-4], temp_folder.name, True)
+        video_found = result != None
         transcript, json_info = youtube_utils.download_transcript(vid[:-4], temp_folder.name)
         transcript_found = transcript != []
         if video_found and transcript_found:
