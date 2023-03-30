@@ -4,7 +4,8 @@
 - Set up environment
   - If using conda, make a conda environment from the siq_env.yml file
   - Also install:
-    - `pip install "jax[tpu]>=0.2.18" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html`
+    - `pip3 install "jax[tpu]>=0.2.18" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html`
+    - `pip3 install python-dotenv`
 
 # Finetuning on SiQ 1.0
 ## Preprocessing SiQ 1.0

@@ -462,7 +462,7 @@ dependencies:
     - keras-preprocessing==1.1.2
     - libclang==14.0.1
     - librosa==0.9.2
-    - libtpu-nightly==0.1.dev20220627
+    # - libtpu-nightly==0.1.dev20220627
     - ml-collections==0.1.1
     - num2words==0.5.11
     - oauthlib==3.2.0
