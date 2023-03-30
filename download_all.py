@@ -17,7 +17,7 @@ valid_ids_path = os.path.join(os.environ["DATA_DIR"], "siq2_qa_release/valid_ids
 with open(valid_ids_path) as f:
     valid_ids = json.load(f)
 
-all_valid_ids = valid_ids["youtubeclips"] + valid_ids["movieclips"] + valid_ids["bmw"]
+all_valid_ids = valid_ids["youtubeclips"] + valid_ids["movieclips"] + valid_ids["car"]
 
 full_videos_path = os.path.join(os.environ["DATA_DIR"], "full_videos")
 if not os.path.exists(full_videos_path):

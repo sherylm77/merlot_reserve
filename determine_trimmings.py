@@ -21,7 +21,7 @@ valid_ids_path = os.path.join(os.environ["DATA_DIR"], "siq2_qa_release/valid_ids
 with open(valid_ids_path) as f:
     valid_ids = json.load(f)
 
-all_valid_ids = valid_ids["youtubeclips"] + valid_ids["movieclips"] + valid_ids["bmw"]
+all_valid_ids = valid_ids["youtubeclips"] + valid_ids["movieclips"] + valid_ids["car"]
 for id in all_valid_ids:
     temp_folder = tempfile.TemporaryDirectory()
     result = youtube_utils.download_video(id, temp_folder.name, False)

@@ -3,11 +3,11 @@
 import os
 import numpy as np
 
-dataset_folder = "/work/sheryl/bmw/raw"
+dataset_folder = "/work/sheryl/car/raw"
 transcripts = os.listdir(os.path.join(dataset_folder, "transcript"))
 videos = os.listdir(os.path.join(dataset_folder, "vision"))
 
-if "bmw" in dataset_folder:
+if "car" in dataset_folder:
     transcripts = [x[:-7] + "_trimmed.mp4.txt" for x in transcripts]
     videos = [x[:-12] + "_trimmed.mp4.txt" for x in videos]
 else:
