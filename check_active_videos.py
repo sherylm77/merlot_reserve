@@ -22,9 +22,9 @@ def find_active_videos(dataset_path):
 
 yt_ids = find_active_videos("/work/sheryl/raw")
 mv_ids = find_active_videos("/work/sheryl/movieclips/raw")
-bmw_ids = find_active_videos("/work/sheryl/bmw/raw")
+car_ids = find_active_videos("/work/sheryl/car/raw")
 
-valid_ids = {"youtubeclips": yt_ids, "movieclips": mv_ids, "bmw": bmw_ids}
+valid_ids = {"youtubeclips": yt_ids, "movieclips": mv_ids, "car": car_ids}
 
 with open("/work/sheryl/merlot_reserve/valid_ids.json", "w") as f:
     f.write(json.dumps(valid_ids))

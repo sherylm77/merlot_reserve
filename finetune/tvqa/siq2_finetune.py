@@ -35,7 +35,7 @@ import os
 from dotenv import load_dotenv
 import wandb
 
-load_dotenv('../../.env')
+load_dotenv('/home/sheryl_test/sheryl/merlot_reserve/.env')
 
 jax.config.update('jax_log_compiles', True)
 is_on_gpu = any([x.platform == 'gpu' for x in jax.local_devices()])
@@ -122,7 +122,7 @@ config['device']['prefetch_size'] = 0
 config['device']['n_fns_per_cycle'] = int(os.environ["NUM_TRAIN_TFRECORDS"])
 
 NUM_EPOCH = args.ne
-TRAIN_SIZE = 330*4 # 42242
+TRAIN_SIZE = 31728
 steps_per_epoch = TRAIN_SIZE // config['device']['batch_size']
 config['optimizer'] = {
     'beta_2': 0.98,
@@ -328,7 +328,8 @@ def val_epoch(state: train_state.TrainState):
     :return:
     """
     val_config = deepcopy(config)
-    val_config['data']['val_fns'] = os.path.join(os.environ["TFRECORDS_PATH"], "val{:03d}of" + os.environ["NUM_VAL_TFRECORDS"] + ".tfrecord")
+    num_val_records = os.environ["NUM_VAL_TFRECORDS"].zfill(3)
+    val_config['data']['val_fns'] = os.path.join(os.environ["TFRECORDS_PATH"], "val{:03d}of" + num_val_records + ".tfrecord")
     val_config['data']['num_val_files'] = int(os.environ["NUM_VAL_TFRECORDS"])
     val_config['data']['do_random_scale'] = False
     val_config['data']['batch_size'] = args.val_batch_size

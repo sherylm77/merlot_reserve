@@ -102,12 +102,12 @@ def read_qa_in(dataset_path, vids, file_name, split):
 
 def make_json_for(split):
     qa_json_path = "/work/sheryl/merlot_reserve/qa_" + split + ".json"
-    # vids = all_vids["youtubeclips"][split] + all_vids["movieclips"][split] + all_vids["bmw"][split] 
+    # vids = all_vids["youtubeclips"][split] + all_vids["movieclips"][split] + all_vids["car"][split] 
     qa_file_name = open(qa_json_path, "w")
 
     read_qa_in("/work/sheryl/raw", all_vids['youtubeclips'][split], qa_file_name, split)
     read_qa_in("/work/sheryl/movieclips/raw", all_vids['movieclips'][split], qa_file_name, split)
-    read_qa_in("/work/sheryl/bmw/raw", all_vids['bmw'][split], qa_file_name, split)
+    read_qa_in("/work/sheryl/car/raw", all_vids['car'][split], qa_file_name, split)
 
     qa_file_name.close()
 

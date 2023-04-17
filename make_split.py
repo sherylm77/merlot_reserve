@@ -12,15 +12,15 @@ train_yt, val_yt = train_test_split(train_val_yt, test_size=0.125, train_size=0.
 train_val_mv, test_mv = train_test_split(valid_ids["movieclips"], test_size=0.2, train_size=0.8)
 train_mv, val_mv = train_test_split(train_val_mv, test_size=0.125, train_size=0.875)
 
-train_val_bmw, test_bmw = train_test_split(valid_ids["bmw"], test_size=0.2, train_size=0.8)
-train_bmw, val_bmw = train_test_split(train_val_bmw, test_size=0.125, train_size=0.875)
+train_val_car, test_car = train_test_split(valid_ids["car"], test_size=0.2, train_size=0.8)
+train_car, val_car = train_test_split(train_val_car, test_size=0.125, train_size=0.875)
 
 split = {
         "subsets":
             {    
                 "youtubeclips": {"train": train_yt, "val": val_yt, "test": test_yt}, 
                 "movieclips": {"train": train_mv, "val": val_mv, "test": test_mv}, 
-                "bmw": {"train": train_bmw, "val": val_bmw, "test": test_bmw}
+                "car": {"train": train_car, "val": val_car, "test": test_car}
             }
         }
 
