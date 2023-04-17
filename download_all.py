@@ -6,7 +6,7 @@ import random
 from moviepy.editor import *
 import subprocess
 import webvtt
-from datetime import datetime, timedelta
+import datetime
 
 load_dotenv('/work/sheryl/merlot_reserve/.env')
 
@@ -42,21 +42,38 @@ for id in all_valid_ids:
     
     # download transcript
     transcript, info = youtube_utils.download_transcript(id, full_videos_path)
-    transcript = webvtt.read(os.path.join(full_videos_path, id + ".v2.en.vtt"))
+    try:
+        transcript = webvtt.read(os.path.join(full_videos_path, id + ".v2.en.vtt"))
+    except:
+        try:
+            transcript = webvtt.read(os.path.join(full_videos_path, id + ".v2.en-manual.vtt"))
+        except:
+            print(id, "not found")
+            continue
+    trimmed_transcript = webvtt.WebVTT()
+
     for caption in transcript:
-        start_time = datetime.strptime(caption.start, '%H:%M:%S.%f')
-        end_time = datetime.strptime(caption.end, '%H:%M:%S.%f')
+        start_time = datetime.datetime.strptime(caption.start, '%H:%M:%S.%f')
+        end_time = datetime.datetime.strptime(caption.end, '%H:%M:%S.%f')
+        start_time = start_time.replace(year=2000,month=1,day=1)
+        end_time = end_time.replace(year=2000,month=1,day=1)
         
         sec = int(str(trim_time).split(".")[0])
-        ms = int(str(trim_time).split(".")[1])
-        trim_timedelta = timedelta(seconds=sec, milliseconds=ms)
-        new_start_time = (start_time + trim_timedelta).time()
-        new_end_time = (end_time + trim_timedelta).time()
-        caption.start = new_start_time.strftime("%H:%M:%S.%f")
-        caption.end = new_end_time.strftime("%H:%M:%S.%f")
+        ms = int(str(trim_time).split(".")[1])*1000 # convert millisecond to microsecond
+        min = 0
+        if sec > 60:
+            min = sec // 60
+            sec = sec % 60
+        trim_time_start = datetime.datetime.combine(datetime.date(year=2000,month=1,day=1), datetime.time(minute=min, second=sec, microsecond=ms))
+        trim_time_end = datetime.datetime.combine(datetime.date(year=2000,month=1,day=1), datetime.time(minute=min, second=sec, microsecond=ms)) + datetime.timedelta(days=0, minutes=0, seconds=60)
+
         # remove extra time stamps between <>
         caption.text = caption.text.replace("<.*?>", "")
-    transcript.save(os.path.join(os.environ["TRANSCRIPT_PATH"], id + "_mod.vtt"))
+        if start_time >= trim_time_start and end_time <= trim_time_end:
+            caption.start = str(start_time - trim_time_start)
+            caption.end = str(end_time - trim_time_start)
+            trimmed_transcript.captions.append(caption)
+    trimmed_transcript.save(os.path.join(os.environ["TRANSCRIPT_PATH"], id + ".vtt"))
 
     # download frames
     frame_dir = os.path.join(os.environ["DATA_DIR"], "frames_temp")
@@ -66,4 +83,3 @@ for id in all_valid_ids:
         output = os.path.join(frame_dir, id, id+"_%03d.jpg")
         subprocess.call('ffmpeg -i {video} -r 3 -q:v 1 {out_name}'.format(video=vid_path, out_name=output), shell=True)
 
-    break
