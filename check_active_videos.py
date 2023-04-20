@@ -2,6 +2,7 @@ from data import youtube_utils
 import os
 import json
 import tempfile
+import numpy as np
 
 def find_active_videos(dataset_path):
     found_vids = []
@@ -24,7 +25,17 @@ yt_ids = find_active_videos("/work/sheryl/raw")
 mv_ids = find_active_videos("/work/sheryl/movieclips/raw")
 car_ids = find_active_videos("/work/sheryl/car/raw")
 
-valid_ids = {"youtubeclips": yt_ids, "movieclips": mv_ids, "car": car_ids}
+mv_ids_unique = np.setdiff1d(np.setdiff1d(np.array(mv_ids), np.array(yt_ids)),
+                              np.array(car_ids))
+car_ids_unique = np.setdiff1d(np.setdiff1d(np.array(car_ids), np.array(yt_ids)),
+                              np.array(mv_ids))
 
-with open("/work/sheryl/merlot_reserve/valid_ids.json", "w") as f:
+for id in yt_ids:
+    assert id not in mv_ids_unique and id not in car_ids_unique, id + " in yt and mv or car"
+for id in mv_ids_unique:
+    assert id not in car_ids_unique, id + " in mv and car"
+
+valid_ids = {"youtubeclips": yt_ids, "movieclips": mv_ids_unique, "car": car_ids_unique}
+
+with open("/work/sheryl/siq2/siq2_qa_release/valid_ids2.json", "w") as f:
     f.write(json.dumps(valid_ids))
