@@ -9,8 +9,10 @@ sys.path.append("/work/sheryl")
 
 # from raw import socialiq_std_folds
 
-with open("/work/sheryl/merlot_reserve/split.json", "r") as f:
+with open("/work/sheryl/siq2/siq2_qa_release/split2.json", "r") as f:
     all_vids = json.load(f)['subsets']
+
+qa_files_not_found = []
 
 def read_qa_in(dataset_path, vids, file_name, split):
     for vid in vids:
@@ -21,7 +23,7 @@ def read_qa_in(dataset_path, vids, file_name, split):
 
         vid_filename = os.path.join(qa_path, vid + ".txt")
         if not os.path.exists(vid_filename): 
-            print(vid_filename, "doesn't exist")
+            qa_files_not_found.append(vid)
             continue
         vid_file = open(vid_filename, "r") 
 
@@ -98,6 +100,8 @@ def read_qa_in(dataset_path, vids, file_name, split):
 
                         vid_file.seek(pos)
                         break
+    if qa_files_not_found != []:
+        print("could not find these qa files: ", qa_files_not_found, "\n")
 
 
 def make_json_for(split):

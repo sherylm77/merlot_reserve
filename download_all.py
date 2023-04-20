@@ -20,15 +20,22 @@ with open(valid_ids_path) as f:
 
 all_valid_ids = valid_ids["youtubeclips"] + valid_ids["movieclips"] + valid_ids["car"]
 
+trim_not_found = []
+videos_not_found = []
+transcript_not_found = []
+
 for id in all_valid_ids:
     if id not in trims:
-        print(id, "not found")
+        trim_not_found.append(id)
         continue
 
     temp_folder = tempfile.TemporaryDirectory()
 
-
     full_video = youtube_utils.download_video(id, temp_folder.name, False)
+    if full_video == None:
+        videos_not_found.append(id)
+        continue
+
     # trim mp4
     clip = VideoFileClip(full_video)
     trim_time = trims[id]
@@ -45,7 +52,6 @@ for id in all_valid_ids:
     output_name = os.path.join(os.environ["WAV_PATH"], id + ".wav")
     subprocess.call('ffmpeg -i {video} -ar 22050 -ac 1 {out_name}'.format(video=input_name, out_name=output_name), shell=True)
 
-
     # download transcript
     transcript, info = youtube_utils.download_transcript(id, temp_folder.name)
     try:
@@ -54,7 +60,7 @@ for id in all_valid_ids:
         try:
             transcript = webvtt.read(os.path.join(temp_folder.name, id + ".v2.en-manual.vtt"))
         except:
-            print(id, "not found")
+            transcript_not_found.append(id)
             continue
     trimmed_transcript = webvtt.WebVTT()
 
@@ -90,3 +96,10 @@ for id in all_valid_ids:
         output = os.path.join(frame_dir, id, id+"_%03d.jpg")
         subprocess.call('ffmpeg -i {video} -r 3 -q:v 1 {out_name}'.format(video=vid_path, out_name=output), shell=True)
 
+
+if trim_not_found != []:
+    print("could not find trims for:", trim_not_found)
+if videos_not_found != []:
+    print("could not download videos for:", videos_not_found)
+if transcript_not_found != []:
+    print("could not download transcripts for:", transcript_not_found)
