@@ -2,10 +2,9 @@
 
 - Clone this repo onto the TPU
 - Set up environment
-  - If using conda, make a conda environment from the siq_env.yml file
+  - If using conda, make a conda environment from the siq_env.yml file and activate the environment
   - Also install:
     - `pip3 install "jax[tpu]>=0.2.18" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html`
-    - `pip3 install python-dotenv`
 
 # Finetuning on SiQ 1.0
 ## Preprocessing SiQ 1.0
@@ -43,7 +42,7 @@ raw
   - Change wandb.init entity or set wandb to None
 
 # Finetuning on SiQ 2.0
-## Preprocessing SiQ 2.0
+## Get SiQ 2.0 data
 - Unzip the siq2.zip file
 - The folder is organized into the following structure:
 ```
@@ -62,6 +61,27 @@ raw
 |_ transcript 
 |_ vision 
 ```
+- If you don't have access to the SiQ 2.0 data zip file, make a siq2 directory with subdirectories like this:
+```
+siq2
+|_ acoustic
+|  |_ mp3
+|_ siq2_qa_release 
+|  |_ qa_train.json
+|  |_ qa_val.json
+|  |_ qa_test.json
+|  |_ split.json
+|  |_ valid_ids.json
+|  |_ trims.json
+|_ transcript 
+|_ vision 
+```
+  - You can copy over the siq2_qa_release directory from this repo
+  - Update paths in the .env file found in merlot_reserve
+  - Update the path to the .env file in merlot_reserve/download_all.py
+  - Run download_all.py
+
+## Preprocessing SiQ 2.0
 - Run prep_data.sh
   - Make sure the command runs prep_data_siq2.py
   - Input the num_folds and num_folds_val in the shell script
