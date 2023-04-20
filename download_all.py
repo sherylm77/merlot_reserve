@@ -33,11 +33,11 @@ for id in all_valid_ids:
     clip = VideoFileClip(full_video)
     trim_time = trims[id]
     clip1 = clip.subclip(trim_time, 60+trim_time)
-    clip1.write_videofile(os.path.join(os.environ["VIDEO_PATH"], id + "_trim.mp4"),codec='libx264')
+    clip1.write_videofile(os.path.join(os.environ["VIDEO_PATH"], id + ".mp4"),codec='libx264')
 
     # convert to mp3
-    input_name = os.path.join(os.environ["VIDEO_PATH"], id + "_trim.mp4")
-    output_name = os.path.join(os.environ["MP3_PATH"], id + "_trim.mp3")
+    input_name = os.path.join(os.environ["VIDEO_PATH"], id + ".mp4")
+    output_name = os.path.join(os.environ["MP3_PATH"], id + ".mp3")
     subprocess.call('ffmpeg -i {video} -ar 22050 -ac 1 {out_name}'.format(video=input_name, out_name=output_name), shell=True)
     
     # download transcript
@@ -76,10 +76,10 @@ for id in all_valid_ids:
     trimmed_transcript.save(os.path.join(os.environ["TRANSCRIPT_PATH"], id + ".vtt"))
 
     # download frames
-    frame_dir = os.path.join(os.environ["DATA_DIR"], "frames_temp")
+    frame_dir = os.path.join(os.environ["DATA_DIR"], "frames")
     if not os.path.exists(os.path.dirname(id)):
         os.makedirs(os.path.join(frame_dir, id), exist_ok=True)
-        vid_path = os.path.join(os.environ["VIDEO_PATH"], id + "_trim.mp4")
+        vid_path = os.path.join(os.environ["VIDEO_PATH"], id + ".mp4")
         output = os.path.join(frame_dir, id, id+"_%03d.jpg")
         subprocess.call('ffmpeg -i {video} -r 3 -q:v 1 {out_name}'.format(video=vid_path, out_name=output), shell=True)
 

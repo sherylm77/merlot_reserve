@@ -1,5 +1,8 @@
 import os
 import subprocess
+from dotenv import load_dotenv
+
+load_dotenv('/work/sheryl/merlot_reserve/.env')
 
 def video_to_frames(video_dir, data_dir):
     vid_names = os.listdir(video_dir)
@@ -13,4 +16,6 @@ def video_to_frames(video_dir, data_dir):
             subprocess.call('ffmpeg -i {video} -r 3 -q:v 1 {out_name}'.format(video=vid_path, out_name=output), shell=True)
 
     print("Finished extracting frames.")
+
+video_to_frames(os.environ["VIDEO_PATH"], os.environ["DATA_DIR"])
     
