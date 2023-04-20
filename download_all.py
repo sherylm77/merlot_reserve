@@ -44,6 +44,12 @@ for id in all_valid_ids:
     output_name = os.path.join(os.environ["MP3_PATH"], id + ".mp3")
     subprocess.call('ffmpeg -i {video} -ar 22050 -ac 1 {out_name}'.format(video=input_name, out_name=output_name), shell=True)
     
+    # convert mp3 to wav
+    input_name = os.path.join(os.environ["MP3_PATH"], id + ".mp3")
+    output_name = os.path.join(os.environ["WAV_PATH"], id + ".wav")
+    subprocess.call('ffmpeg -i {video} -ar 22050 -ac 1 {out_name}'.format(video=input_name, out_name=output_name), shell=True)
+
+
     # download transcript
     transcript, info = youtube_utils.download_transcript(id, temp_folder.name)
     try:
