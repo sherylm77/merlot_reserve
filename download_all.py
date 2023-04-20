@@ -20,10 +20,6 @@ with open(valid_ids_path) as f:
 
 all_valid_ids = valid_ids["youtubeclips"] + valid_ids["movieclips"] + valid_ids["car"]
 
-full_videos_path = os.path.join(os.environ["DATA_DIR"], "full_videos")
-if not os.path.exists(full_videos_path):
-    os.mkdir(full_videos_path)
-
 for id in all_valid_ids:
     if id not in trims:
         print(id, "not found")
