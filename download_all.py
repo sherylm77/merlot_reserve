@@ -7,6 +7,7 @@ from moviepy.editor import *
 import subprocess
 import webvtt
 import datetime
+import tempfile
 
 load_dotenv('/work/sheryl/merlot_reserve/.env')
 
@@ -28,7 +29,10 @@ for id in all_valid_ids:
         print(id, "not found")
         continue
 
-    full_video = youtube_utils.download_video(id, full_videos_path, False)
+    temp_folder = tempfile.TemporaryDirectory()
+
+
+    full_video = youtube_utils.download_video(id, temp_folder.name, False)
     # trim mp4
     clip = VideoFileClip(full_video)
     trim_time = trims[id]
@@ -41,12 +45,12 @@ for id in all_valid_ids:
     subprocess.call('ffmpeg -i {video} -ar 22050 -ac 1 {out_name}'.format(video=input_name, out_name=output_name), shell=True)
     
     # download transcript
-    transcript, info = youtube_utils.download_transcript(id, full_videos_path)
+    transcript, info = youtube_utils.download_transcript(id, temp_folder.name)
     try:
-        transcript = webvtt.read(os.path.join(full_videos_path, id + ".v2.en.vtt"))
+        transcript = webvtt.read(os.path.join(temp_folder.name, id + ".v2.en.vtt"))
     except:
         try:
-            transcript = webvtt.read(os.path.join(full_videos_path, id + ".v2.en-manual.vtt"))
+            transcript = webvtt.read(os.path.join(temp_folder.name, id + ".v2.en-manual.vtt"))
         except:
             print(id, "not found")
             continue
@@ -74,6 +78,7 @@ for id in all_valid_ids:
             caption.end = str(end_time - trim_time_start)
             trimmed_transcript.captions.append(caption)
     trimmed_transcript.save(os.path.join(os.environ["TRANSCRIPT_PATH"], id + ".vtt"))
+    temp_folder.cleanup()
 
     # download frames
     frame_dir = os.path.join(os.environ["DATA_DIR"], "frames")
