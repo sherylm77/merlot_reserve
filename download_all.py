@@ -1,3 +1,6 @@
+# Given trims.json and valid_ids.json, downloads siq2 dataset audio (mp3 and wav),
+# video, transcripts, and frames.
+
 import json
 import os
 from dotenv import load_dotenv
@@ -64,6 +67,7 @@ for id in all_valid_ids:
             continue
     trimmed_transcript = webvtt.WebVTT()
 
+    # adjust start/end times to start at 0 instead of the trimmed time
     for caption in transcript:
         start_time = datetime.datetime.strptime(caption.start, '%H:%M:%S.%f')
         end_time = datetime.datetime.strptime(caption.end, '%H:%M:%S.%f')

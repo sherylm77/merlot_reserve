@@ -1,9 +1,10 @@
+# Download base.ckpt checkpoint used for MERLOT finetuning.
+
 from google.cloud import storage
 import os
 from dotenv import load_dotenv
 
-load_dotenv('../../.env')
-
+load_dotenv('.env')
 
 chkpt_path = os.environ["CHKPT_PATH"]
 

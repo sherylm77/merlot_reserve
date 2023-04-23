@@ -1,3 +1,7 @@
+# Makes aggregated json file containing input data to MERLOT
+# Reads raw qa files for questions and correct and incorrect answers
+# Processes QA into binary QA task (2 answers per question)
+
 import os
 import json
 import re
@@ -6,8 +10,6 @@ import sys
 import random
 
 sys.path.append("/work/sheryl")
-
-# from raw import socialiq_std_folds
 
 with open("/work/sheryl/siq2/siq2_qa_release/split2.json", "r") as f:
     all_vids = json.load(f)['subsets']
