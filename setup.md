@@ -89,6 +89,8 @@ siq2
     - This is the number of output tfrecord files
   - Change paths in the .env file
   - Change the path to the .env file in prep_data_siq2.py
+  - Change the file paths to the train and val data (split_fn)
+    - Currently they are qa_train.json and qa_val.json
 - Download base pretrained checkpoint by running get_chkpt.py
 
 ## Finetune on SiQ 2.0
