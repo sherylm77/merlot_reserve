@@ -27,6 +27,8 @@ trim_not_found = []
 videos_not_found = []
 transcript_not_found = []
 
+all_valid_ids = ['4Vic0qKl64Y', 'GbYGoWvJpwI']
+
 for id in all_valid_ids:
     if id not in trims:
         trim_not_found.append(id)
@@ -77,7 +79,7 @@ for id in all_valid_ids:
         sec = int(str(trim_time).split(".")[0])
         ms = int(str(trim_time).split(".")[1])*1000 # convert millisecond to microsecond
         min = 0
-        if sec > 60:
+        if sec >= 60:
             min = sec // 60
             sec = sec % 60
         trim_time_start = datetime.datetime.combine(datetime.date(year=2000,month=1,day=1), datetime.time(minute=min, second=sec, microsecond=ms))
