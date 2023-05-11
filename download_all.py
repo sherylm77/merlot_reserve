@@ -27,8 +27,6 @@ trim_not_found = []
 videos_not_found = []
 transcript_not_found = []
 
-all_valid_ids = ['4Vic0qKl64Y', 'GbYGoWvJpwI']
-
 for id in all_valid_ids:
     if id not in trims:
         trim_not_found.append(id)
