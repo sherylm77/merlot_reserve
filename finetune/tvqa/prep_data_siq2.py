@@ -130,7 +130,7 @@ split_fn = {
     'val': 'qa_val.json',
     #'test': 'tvqa_test_public.jsonl',
 }[args.split]
-split_fn = os.path.join(os.environ["DATA_DIR"], 'siq2_qa_release', split_fn)
+split_fn = os.path.join(os.environ["DATA_DIR"], 'qa', split_fn)
 
 data = []
 with open(split_fn, 'r') as f:
