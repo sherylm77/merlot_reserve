@@ -5,8 +5,6 @@ MERLOT Reserve (in submission) is a model for learning joint representations of 
 
 Visit our project page at [rowanzellers.com/merlotreserve](https://rowanzellers.com/merlotreserve) or read the [full paper](#) to learn more.
 
-![](https://i.imgur.com/Z9iEsLZ.png "MERLOT Reserve Teaser")
-
 ## What's here
 
 We are releasing the following:
@@ -75,3 +73,40 @@ gs://merlotreserve/finetune_data/tvqa/
 # VCR data
 gs://merlotreserve/finetune_data/vcr/
 ```
+
+To download `base.ckpt` (needed for finetuning), run
+```
+cd merlot_reserve
+python3 get_chkpt.py
+```
+
+## Setup
+Make a conda environment from the siq_env.yml file and activate the environment
+
+Also install: `pip3 install "jax[tpu]>=0.2.18" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html`
+
+## Preprocessing Data into TFRecords
+Update paths in the `.env` file and update the path to the `.env` file in `merlot_reserve/finetune/tvqa/prep_data_siq2.py`.
+
+Run
+```
+cd merlot_reserve/finetune/tvqa
+./prep_data.sh
+```
+
+## Finetuning MERLOT
+Change the path to the .env file in `siq2_finetune.py`
+
+Change `config['data']['num_answers']` if needed
+
+Change `TRAIN_SIZE` (number of train datapoints)
+
+Change wandb.init entity or set wandb to None
+
+Run
+```
+cd merlot_reserve/finetune/tvqa
+python3 siq2_finetune.py
+```
+
+More detailed instructions in `setup.md`.
