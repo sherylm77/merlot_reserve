@@ -1,11 +1,48 @@
-# merlot_reserve
-Code release for "MERLOT Reserve: Neural Script Knowledge through Vision and Language and Sound"
+# merlot_reserve for SiQ
+(Forked from Code release for "MERLOT Reserve: Neural Script Knowledge through Vision and Language and Sound")
 
+## Download Pretrained Checkpoint
+To download `base.ckpt` (needed for finetuning), run
+```
+cd merlot_reserve
+python3 get_chkpt.py
+```
+
+## Set up
+See https://sites.research.google/trc/about/ for more information on TPUs.
+
+- If using conda, make a conda environment from the siq_env.yml file and activate the environment
+- Also install:
+  - `pip3 install "jax[tpu]>=0.2.18" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html`
+
+## Preprocessing SiQ 2.0
+- Change paths in the .env file
+- Change the path to the .env file in `merlot_reserve/finetune/tvqa/prep_data_siq2.py`
+  - Change the file paths to the train and val data (split_fn)
+    - Currently they are qa_train.json and qa_val.json
+- Run `prep_data_siq2.py` by executing:
+```
+cd merlot_reserve/finetune/tvqa
+./prep_data.sh
+```
+
+## Finetuning on SiQ 2.0
+- Change the path to the .env file in `merlot_reserve/finetune/tvqa/siq2_finetune.py`
+  - Change `config['data']['num_answers']` if needed
+    - e.g. for binary task, this should be set to 2
+  - Change TRAIN_SIZE
+    - Number of lines in the qa_train.json file
+  - Change wandb.init entity or set wandb to None
+- Run `siq2_finetune.py` by executing:
+```
+cd merlot_reserve/finetune/tvqa
+python3 siq2_finetune.py
+```
+
+## Information about MERLOT
 MERLOT Reserve (in submission) is a model for learning joint representations of vision, language, and sound from YouTube. The learned model can be used in a zero-shot or finetuned setting, where it does well on tasks like VCR and TVQA.
 
 Visit our project page at [rowanzellers.com/merlotreserve](https://rowanzellers.com/merlotreserve) or read the [full paper](#) to learn more.
-
-![](https://i.imgur.com/Z9iEsLZ.png "MERLOT Reserve Teaser")
 
 ## What's here
 
