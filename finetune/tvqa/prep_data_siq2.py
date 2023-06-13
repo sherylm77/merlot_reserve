@@ -4,7 +4,7 @@ Convert TVQA into tfrecords
 import sys
 import csv
 
-sys.path.append('/work/sheryl/merlot_reserve')
+sys.path.append('/home/sheryl_test/sheryl/merlot_reserve')
 import argparse
 import hashlib
 import io
@@ -35,8 +35,9 @@ import pysrt
 from unidecode import unidecode
 import ftfy
 from dotenv import load_dotenv
+import soundfile
 
-load_dotenv('/work/sheryl/merlot_reserve/.env')
+load_dotenv('/home/sheryl_test/sheryl/merlot_reserve/.env')
 
 
 parser = create_base_parser()
@@ -126,9 +127,9 @@ using_face_bbox = os.environ["FBBOX_PATH"] != ""
 out_fn = os.path.join(os.environ["TFRECORDS_PATH"], '{}{:03d}of{:03d}.tfrecord'.format(args.split, args.fold, args.num_folds))
 
 split_fn = {
-    'train': 'qa_train.json',
-    'val': 'qa_val.json',
-    #'test': 'tvqa_test_public.jsonl',
+    'train': 'qa_train_dropped.json',
+    'val': 'qa_val_dropped.json',
+    'test': 'qa_test_dropped.json',
 }[args.split]
 split_fn = os.path.join(os.environ["DATA_DIR"], 'qa', split_fn)
 
@@ -208,6 +209,10 @@ def parse_item(item):
     frames_path = os.path.join(args.data_dir, 'frames',
                             item['vid_name'])
     name = item['vid_name']
+
+    if not os.path.exists(frames_path):
+        print(name, "not found\n")
+        return
 
     # if using face bounding boxes
     if using_face_bbox:
@@ -314,7 +319,11 @@ def parse_item(item):
     #     import ipdb
     #     ipdb.set_trace()
     ffmpeg_process.kill()
-    sr, waveform = wavfile.read(audio_fn, mmap=False)
+    try:
+        sr, waveform = wavfile.read(audio_fn, mmap=False)
+    except:
+        sr, waveform = soundfile.read(audio_fn, mmap=False)
+        print("WAV PROBLEM WITH ID:", item['vid_name'])
     waveform = waveform.astype('float32')
     waveform /= max(np.abs(waveform).max(), 1.0)
 
@@ -401,7 +410,11 @@ with GCSTFRecordWriter(out_fn, auto_close=False) as tfrecord_writer:
         if using_face_bbox:
             qa_item, frames, frames_bmasks, frames_fmasks, bboxes, fbboxes, specs, subs = parse_item(item)
         else:
-            qa_item, frames, specs, subs = parse_item(item)
+            result = parse_item(item)
+            if result is None:
+                continue
+            else:
+                qa_item, frames, specs, subs = result
 
         # Tack on the relative position of the localized timestamp, plus a START token for separation
         query_enc = encoder.encode(qa_item['qa_query']).ids
